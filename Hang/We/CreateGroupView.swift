@@ -2,9 +2,16 @@ import SwiftUI
 
 struct CreateGroupView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(GroupStore.self) private var groupStore
+
     @State private var groupName = ""
-    @State private var code = ""
-    @Binding var tgs: [TestGroup]
+    @State private var createdCode: String?
+    @State private var errorMessage: String?
+    @State private var isCreating = false
+
+    private var trimmedName: String {
+        groupName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
         NavigationStack {
@@ -13,14 +20,20 @@ struct CreateGroupView: View {
                     .padding()
                     .background(Color(.secondarySystemBackground))
                     .clipShape(.capsule)
+                    .disabled(createdCode != nil)
 
                 VStack {
-                    Text("Invite friends with code")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    Text(
+                        createdCode == nil
+                            ? "Your invite code appears once the group is created."
+                            : "Invite friends with this code"
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
 
                     HStack(spacing: 4) {
-                        ForEach(0..<6, id: \.self) { index in
+                        ForEach(0..<InviteCode.length, id: \.self) { index in
                             otpDigitBox(at: index)
                         }
                     }
@@ -29,19 +42,55 @@ struct CreateGroupView: View {
                 Spacer()
             }
             .padding()
-            .navigationTitle("Create Group")
+            .navigationTitle(createdCode == nil ? "Create Group" : "Group Created")
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Confirm", systemImage: "checkmark") {
-                        tgs.append(TestGroup(code: code, name: groupName))
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(createdCode == nil ? "Cancel" : "Close") {
                         dismiss()
+                    }
+                    .disabled(isCreating)
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    if createdCode != nil {
+                        Button("Done") {
+                            dismiss()
+                        }
+                    } else {
+                        Button("Create", systemImage: "checkmark") {
+                            Task { await create() }
+                        }
+                        .disabled(trimmedName.isEmpty || isCreating)
                     }
                 }
             }
+            .alert(
+                "Couldn't create group",
+                isPresented: Binding(
+                    get: { errorMessage != nil },
+                    set: { if !$0 { errorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
+            }
         }
-        .onAppear {
-            // TODO: keep generating until the code is not already in Firestore.
-            code = generateRandomCode()
+    }
+
+    private func create() async {
+        guard !isCreating, !trimmedName.isEmpty else { return }
+
+        isCreating = true
+        defer { isCreating = false }
+
+        do {
+            let created = try await groupStore.createGroup(name: trimmedName)
+            // Show the code the store actually reserved; a collision retry can
+            // pick a different one than any code previewed in the UI.
+            createdCode = created.code
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -57,19 +106,15 @@ struct CreateGroupView: View {
     }
 
     private func characterAt(_ index: Int) -> String {
-        guard index < code.count else { return "" }
-        let stringIndex = code.index(code.startIndex, offsetBy: index)
-        return String(code[stringIndex])
-    }
-
-    private func generateRandomCode(length: Int = 6) -> String {
-        let characters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        return String(
-            (0..<length).compactMap { _ in characters.randomElement() }
-        )
+        guard let createdCode, index < createdCode.count else { return "" }
+        let stringIndex = createdCode.index(createdCode.startIndex, offsetBy: index)
+        return String(createdCode[stringIndex])
     }
 }
 
+#if DEBUG
 #Preview {
-    CreateGroupView(tgs: .constant([]))
+    CreateGroupView()
+        .environment(GroupStore.preview(with: PreviewData.members))
 }
+#endif

@@ -9,346 +9,52 @@ public enum GroupTab: String, CaseIterable, Identifiable {
 }
 
 struct GroupView: View {
-    var sizing = Sizing()
-    var colors = Colors()
-    @Binding var tg: TestGroup
+    let groupID: String
+    @Environment(GroupStore.self) private var groupStore
     @State private var selectedGroupTab: GroupTab = .events
+
+    private var tg: TestGroup? { groupStore.group(groupID) }
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                VStack {
-                    Picker("Picker", selection: $selectedGroupTab) {
-                        ForEach(GroupTab.allCases) { gtab in
-                            Text(gtab.rawValue)
-                        }
-                    }
-                    .padding()
-                    .pickerStyle(.segmented)
-
-                    switch selectedGroupTab {
-                    case .cal:
-                        CalendarView(tg: $tg)
-                    case .events:
-                        EventView(tg: $tg)
-                    case .info:
-                        MoreInfoView(tg: $tg)
+            VStack {
+                Picker("Picker", selection: $selectedGroupTab) {
+                    ForEach(GroupTab.allCases) { gtab in
+                        Text(gtab.rawValue)
                     }
                 }
-                .navigationTitle(tg.name)
+                .padding()
+                .pickerStyle(.segmented)
+
+                switch selectedGroupTab {
+                case .cal:
+                    GroupCalendarView(groupID: groupID)
+                case .events:
+                    EventView(groupID: groupID)
+                case .info:
+                    MoreInfoView(groupID: groupID)
+                }
             }
+            .navigationTitle(tg?.name ?? "Group")
         }
     }
 }
 
-#Preview {
-    GroupView(
-        tg: .constant(
-            TestGroup(
-                code: "HELLO1", name: "CODZEE",
-                events: [
-                    GroupEvents(name: "event1", time: 1_720_708_600),
-                    GroupEvents(name: "event2", time: 1_790_403_500),
-                ]
-            )
-        )
-    )
-}
-
-struct CalendarView: View {
-    var sizing = Sizing()
-    var colors = Colors()
-    @Binding var tg: TestGroup
-
-    private let calendar: Calendar = {
-        var calendar = Calendar.current
-        calendar.firstWeekday = 2
-        return calendar
-    }()
-
-    @State private var displayedMonth: Date = Date()
-    @State private var selectedDate: Date? = Date()
-    @State private var isShowingCreateEvent = false
-
-    private var members: [Person] { tg.members }
-
-    private var availability: AvailabilityCalculator {
-        AvailabilityCalculator(calendar: calendar)
-    }
-
-    // MARK: - Month grid
-
-    private func generateMonthGrid() -> [Date] {
-        guard
-            let monthInterval = calendar.dateInterval(
-                of: .month,
-                for: displayedMonth
-            ),
-            let firstWeek = calendar.dateInterval(
-                of: .weekOfMonth,
-                for: monthInterval.start
-            ),
-            let lastWeek = calendar.dateInterval(
-                of: .weekOfMonth,
-                for: monthInterval.end.addingTimeInterval(-1)
-            )
-        else {
-            return []
-        }
-
-        var dates: [Date] = []
-        var currentDate = firstWeek.start
-
-        while currentDate < lastWeek.end {
-            dates.append(currentDate)
-
-            guard
-                let nextDate = calendar.date(
-                    byAdding: .day,
-                    value: 1,
-                    to: currentDate
-                )
-            else {
-                break
-            }
-
-            currentDate = nextDate
-        }
-
-        return dates
-    }
-
-    private var weekdays: [String] {
-        let symbols = calendar.shortStandaloneWeekdaySymbols
-        return Array(symbols[1...6] + [symbols[0]])
-    }
-
-    private var todayWeekdayIndex: Int {
-        let originalIndex = calendar.component(.weekday, from: Date()) - 1
-        return (originalIndex + 6) % 7
-    }
-
-    private func changeMonth(by value: Int) {
-        displayedMonth =
-            calendar.date(byAdding: .month, value: value, to: displayedMonth)
-            ?? displayedMonth
-    }
-
-    private func weekdayCell(at index: Int) -> some View {
-        let isToday = index == todayWeekdayIndex
-
-        let textColor: Color = isToday ? .primary : .gray
-
-        let backgroundColor: Color =
-            isToday
-            ? .secondary.opacity(0.4)
-            : .secondary.opacity(0.2)
-
-        return Text(weekdays[index])
-            .font(.subheadline)
-            .frame(maxWidth: .infinity)
-            .foregroundStyle(textColor)
-            .padding(.vertical, 3)
-            .background(
-                backgroundColor,
-                in: RoundedRectangle(cornerRadius: 8)
-            )
-    }
-
-    var body: some View {
-        // The whole calendar scrolls as one page, so the availability timeline
-        // below the month grid stays fully visible without its own scroller.
-        ScrollView {
-            VStack(spacing: 2) {
-                monthHeader
-                monthGrid
-
-                Divider()
-                    .padding(.vertical, 8)
-
-                DayAvailabilityView(
-                    date: selectedDate ?? Date(),
-                    members: members,
-                    calendar: calendar
-                )
-            }
-            .padding(15)
-        }
-        .overlay(alignment: .bottomTrailing) {
-            createEventButton
-        }
-        .sheet(isPresented: $isShowingCreateEvent) {
-            CreateEventView(
-                tg: $tg,
-                initialDate: selectedDate ?? Date()
-            )
-        }
-    }
-
-    private var monthHeader: some View {
-        VStack(spacing: 24) {
-            HStack {
-                Button {
-                    changeMonth(by: -1)
-                } label: {
-                    Image(systemName: "chevron.left")
-                }
-
-                Spacer()
-                Text(displayedMonth.formatted(.dateTime.month(.wide).year()))
-                    .font(.headline)
-                Spacer()
-                Button {
-                    changeMonth(by: 1)
-                } label: {
-                    Image(systemName: "chevron.right")
-                }
-            }
-            .tint(.primary)
-            .padding(.horizontal)
-
-            HStack(spacing: 2) {
-                ForEach(weekdays.indices, id: \.self) { index in
-                    weekdayCell(at: index)
-                }
-            }
-        }
-    }
-
-    private var monthGrid: some View {
-        let days = generateMonthGrid()
-        let topDays = topAvailableDays(among: days)
-
-        return LazyVGrid(
-            columns: Array(
-                repeating: GridItem(.flexible(), spacing: 2),
-                count: 7
-            ),
-            spacing: 2
-        ) {
-            ForEach(days, id: \.self) { date in
-                dayCell(for: date, topAvailableDays: topDays)
-            }
-        }
-    }
-
-    // A single day in the month grid, including its availability shading,
-    // outlines, and event marker.
-    private func dayCell(for date: Date, topAvailableDays: Set<Date>) -> some View {
-        let isCurrentMonth = calendar.isDate(
-            date,
-            equalTo: displayedMonth,
-            toGranularity: .month
-        )
-
-        let isSelected =
-            selectedDate.map { calendar.isDate($0, inSameDayAs: date) } ?? false
-
-        let hasEvents = tg.events.contains {
-            calendar.isDate(
-                Date(timeIntervalSince1970: $0.time),
-                inSameDayAs: date
-            )
-        }
-
-        let isTopAvailable =
-            topAvailableDays.contains(calendar.startOfDay(for: date))
-
-        let freeFraction = availability.freeFraction(on: date, members: members)
-
-        // Darker green means more of the group is free that day.
-        let shading = 0.05 + 0.5 * freeFraction
-
-        return Button {
-            selectedDate = date
-        } label: {
-            Text("\(calendar.component(.day, from: date))")
-                .font(.subheadline)
-                .frame(maxWidth: .infinity, minHeight: 45)
-                .overlay(alignment: .bottom) {
-                    if hasEvents {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.orange)
-                            .padding(.bottom, 4)
-                    }
-                }
-                .foregroundStyle(isCurrentMonth ? .primary : .secondary)
-                .background(
-                    colors.green.opacity(
-                        isCurrentMonth ? shading : shading * 0.4
-                    ),
-                    in: RoundedRectangle(cornerRadius: 8)
-                )
-                .overlay {
-                    // Most available days of the month.
-                    if isTopAvailable {
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(
-                                Color.blue,
-                                style: StrokeStyle(lineWidth: 1.5, dash: [3, 2])
-                            )
-                    }
-                }
-                .overlay {
-                    // Days that already have an event.
-                    if hasEvents {
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Color.orange, lineWidth: 2)
-                            .padding(2)
-                    }
-                }
-                .overlay {
-                    if isSelected {
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(colors.dgreen, lineWidth: 2.5)
-                    }
-                }
-        }
-        .buttonStyle(.plain)
-    }
-
-    // The three days of the displayed month where the group is most free.
-    private func topAvailableDays(among days: [Date]) -> Set<Date> {
-        let monthDays = days.filter {
-            calendar.isDate($0, equalTo: displayedMonth, toGranularity: .month)
-        }
-
-        let best = monthDays
-            .map { ($0, availability.freeFraction(on: $0, members: members)) }
-            .filter { $0.1 > 0 }
-            .sorted { $0.1 > $1.1 }
-            .prefix(3)
-
-        return Set(best.map { calendar.startOfDay(for: $0.0) })
-    }
-
-    // Floating action button, pinned to the bottom of the screen so it stays
-    // reachable while the calendar page is scrolled.
-    private var createEventButton: some View {
-        Button {
-            isShowingCreateEvent = true
-        } label: {
-            Image(systemName: "plus")
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(width: 60, height: 60)
-                .background(colors.dgreen, in: Circle())
-                .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
-        }
-        .padding(20)
-        .accessibilityLabel("New event")
-    }
-}
+// MARK: - Events
 
 struct EventView: View {
     var sizing = Sizing()
-    var colors = Colors()
-    @Binding var tg: TestGroup
+    let groupID: String
+    @Environment(GroupStore.self) private var groupStore
     @State private var showAddView = false
+
+    private var events: [GroupEvents] {
+        groupStore.groupEvents(groupID)
+    }
+
     var body: some View {
         List {
-            ForEach($tg.events) { $event in
+            ForEach(events) { event in
                 VStack(alignment: .leading) {
                     HStack {
                         Text(event.name)
@@ -357,39 +63,72 @@ struct EventView: View {
                             .frame(width: 1)
                             .overlay(.black)
                         Text(
-                            Date(timeIntervalSince1970: event.time)
-                                .formatted(date: .numeric, time: .shortened)
+                            event.startTime
+                                .formatted(date: .abbreviated, time: .shortened)
                         )
                         .font(.system(size: sizing.x4))
                     }
-                    Text(event.desc)
-                        .font(.system(size: sizing.x3))
-                        .lineLimit(1)
+
+                    if !event.desc.isEmpty {
+                        Text(event.desc)
+                            .font(.system(size: sizing.x3))
+                            .lineLimit(1)
+                    }
                 }
                 .listRowBackground(Color(.systemGray6))
+                .swipeActions {
+                    Button("Delete", role: .destructive) {
+                        Task { await groupStore.deleteEvent(event, in: groupID) }
+                    }
+                }
             }
+
             Button {
-                showAddView.toggle()
+                showAddView = true
             } label: {
                 Text("+ Add New Event")
                     .font(.system(size: sizing.x4))
-                    
-            } .listRowBackground(Color(.systemGray6))
+            }
+            .listRowBackground(Color(.systemGray6))
         }
         .padding(.top, -sizing.x4)
         .scrollContentBackground(.hidden)
         .sheet(isPresented: $showAddView) {
-            CreateEventView(tg: $tg)
+            CreateEventView(groupID: groupID, initialDate: Date())
                 .presentationDetents([.medium])
                 .presentationBackground(.ultraThinMaterial)
         }
     }
 }
 
+// MARK: - More info
+
 struct MoreInfoView: View {
     var sizing = Sizing()
-    var colors = Colors()
-    @Binding var tg: TestGroup
+    @Environment(GroupStore.self) private var groupStore
+    @Environment(AvailabilityStore.self) private var availabilityStore
+    @Environment(\.dismiss) private var dismiss
+
+    let groupID: String
+
+    private var tg: TestGroup? { groupStore.group(groupID) }
+    private var members: [Person] { groupStore.roster(groupID) }
+
+    private var currentMember: Person? {
+        members.first(where: \.isCurrentUser)
+    }
+
+    /// Reads the live member document and writes changes back through the
+    /// store. The toggle therefore reflects the server's answer, not a local
+    /// guess that could disagree after a relaunch.
+    private var sharingBinding: Binding<Bool> {
+        Binding(
+            get: { currentMember?.sharingEnabled ?? false },
+            set: { enabled in
+                Task { await groupStore.setSharing(enabled, groupID: groupID) }
+            }
+        )
+    }
 
     var body: some View {
         ScrollView {
@@ -397,38 +136,45 @@ struct MoreInfoView: View {
                 Text("Invite Code")
                     .font(.system(size: sizing.x5, weight: .medium))
                     .padding(.bottom, -sizing.x1)
+
                 ZStack {
                     RoundedRectangle(cornerRadius: sizing.x3)
                         .foregroundStyle(Color.black.opacity(0.1))
-                    Text(tg.code)
+                    Text(tg?.code ?? "------")
                         .font(.system(size: sizing.x7, weight: .medium))
                         .padding(.vertical, sizing.x1)
                         .padding(.horizontal, sizing.x3)
                 }
                 .fixedSize(horizontal: true, vertical: false)
                 .padding(sizing.x1)
+
                 Divider()
                     .frame(height: 0.8)
                     .overlay(.black)
                     .padding(.vertical, sizing.x2)
+
                 VStack(alignment: .leading) {
                     Text("Description")
                         .font(.system(size: sizing.x6, weight: .bold))
-                    Text(tg.desc)
+                    Text(tg?.desc ?? "")
                         .font(.system(size: sizing.x5))
+
                     Divider()
                         .frame(height: 0.8)
                         .overlay(.black)
                         .padding(.vertical, sizing.x2)
-                    Text("Members (\(tg.members.count))")
+
+                    Text("Members (\(members.count))")
                         .font(.system(size: sizing.x6, weight: .bold))
-                    ForEach(tg.members) { member in
+
+                    ForEach(members) { member in
                         HStack {
                             Image(systemName: "person.crop.circle")
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: sizing.x10)
                                 .fontWeight(.light)
+
                             VStack(alignment: .leading) {
                                 Text(member.name)
                                     .font(.system(size: sizing.x5))
@@ -436,11 +182,83 @@ struct MoreInfoView: View {
                                     .font(.system(size: sizing.x4))
                                     .lineLimit(1)
                             }
+
+                            Spacer()
+
+                            Circle()
+                                .fill(statusColor(for: member))
+                                .frame(width: 8, height: 8)
+                                .accessibilityLabel(statusText(for: member))
                         }
                     }
+
+                    Divider()
+                        .frame(height: 0.8)
+                        .overlay(.black)
+                        .padding(.vertical, sizing.x2)
+
+                    Toggle("Share my availability", isOn: sharingBinding)
+                        .font(.system(size: sizing.x5))
+                        .disabled(currentMember == nil)
+
+                    Text("Only start and end times are shared. Event titles never leave your phone.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Button("Leave group", role: .destructive) {
+                        Task {
+                            await groupStore.leaveGroup(groupID)
+                            dismiss()
+                        }
+                    }
+                    .font(.system(size: sizing.x5))
+                    .padding(.top, sizing.x1)
                 }
             }
         }
         .padding(.horizontal, sizing.x4)
     }
+
+    private func status(for member: Person) -> MemberAvailabilityStatus {
+        AvailabilityCalculator.sharedStatus(
+            shared: availabilityStore.isSharing(member.uid, inGroup: groupID),
+            updatedAt: availabilityStore.byGroup[groupID]?[member.uid]?.updatedAt
+        )
+    }
+
+    private func statusColor(for member: Person) -> Color {
+        switch status(for: member) {
+        case .sharing, .mock:
+            return .green
+        case .stale:
+            return .orange
+        case .notSharing:
+            return .secondary
+        }
+    }
+
+    private func statusText(for member: Person) -> String {
+        switch status(for: member) {
+        case .sharing, .mock:
+            return "Sharing availability"
+        case .stale:
+            return "Availability is out of date"
+        case .notSharing:
+            return "Not sharing availability"
+        }
+    }
 }
+
+#if DEBUG
+#Preview("Group") {
+    GroupView(groupID: PreviewData.groupID)
+        .environment(GroupStore.preview(with: PreviewData.members))
+        .environment(AvailabilityStore.preview())
+}
+
+#Preview("Events") {
+    EventView(groupID: PreviewData.groupID)
+        .environment(GroupStore.preview(with: PreviewData.members))
+        .environment(AvailabilityStore.preview())
+}
+#endif

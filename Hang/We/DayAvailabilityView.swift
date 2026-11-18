@@ -6,20 +6,34 @@
 //
 //  Layout: time runs down the page on the leading edge, and every member gets
 //  their own column with their avatar on top. The view lays out at its full
-//  height and leaves scrolling to the enclosing CalendarView, so the whole
+//  height and leaves scrolling to the enclosing calendar, so the whole
 //  calendar scrolls as one page. Pinching changes the height of each hour row.
+//
+//  Privacy: a member's busy block is a translucent bar with no text. Only the
+//  current user's own column ever shows an event title, because that title is
+//  already on this device.
 //
 
 import SwiftUI
 
 struct DayAvailabilityView: View {
-    var colors = Colors()
     let date: Date
-    let members: [Person]
+    let groupID: String
     let calendar: Calendar
+
+    @Environment(GroupStore.self) private var groupStore
+    @Environment(AvailabilityStore.self) private var availabilityStore
+    @State private var calendarStore = PersonalCalendarStore.shared
+
+    /// Preview-only: fills lanes that have no shared data with the debug sample
+    /// schedule. Has no effect in a release build, where the mock generator is
+    /// compiled out.
+    var useMockFallback = false
 
     /// Committed pinch-to-zoom level for the hour rows.
     @State private var zoom: CGFloat = 1
+
+    @State private var isShowingLegend = false
 
     /// Live pinch delta. `@GestureState` resets it to 1 when the gesture ends.
     @GestureState private var pinch: CGFloat = 1
@@ -28,8 +42,19 @@ struct DayAvailabilityView: View {
     private let avatarRowHeight: CGFloat = 50
     private let baseHourHeight: CGFloat = 54
 
+    // MARK: - Data
+
+    private var members: [Person] { groupStore.roster(groupID) }
+
     private var calculator: AvailabilityCalculator {
-        AvailabilityCalculator(calendar: calendar)
+        AvailabilityCalculator(
+            calendar: calendar,
+            personalEvents: calendarStore.events,
+            groupEvents: groupStore.groupEvents(groupID),
+            sharedBusy: availabilityStore.busyIntervals(inGroup: groupID),
+            sharedUpdatedAt: availabilityStore.updatedAt(inGroup: groupID),
+            useMockFallback: useMockFallback
+        )
     }
 
     private var window: DateInterval {
@@ -38,7 +63,7 @@ struct DayAvailabilityView: View {
 
     /// Every whole hour in the availability window, e.g. 8 through 21.
     private var hours: [Int] {
-        Array(AvailabilityDay.startHour..<AvailabilityDay.endHour)
+        Array(DayWindow.standard.startHour..<DayWindow.standard.endHour)
     }
 
     // MARK: - Zoom
@@ -87,7 +112,7 @@ struct DayAvailabilityView: View {
     }()
 
     private func hourLabel(for hour: Int) -> String {
-        let offset = hour - AvailabilityDay.startHour
+        let offset = hour - DayWindow.standard.startHour
         let hourDate =
             calendar.date(byAdding: .hour, value: offset, to: window.start)
             ?? window.start
@@ -111,6 +136,39 @@ struct DayAvailabilityView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
+
+            Button {
+                isShowingLegend = true
+            } label: {
+                Image(systemName: "info.circle")
+                    .font(.subheadline)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("Availability legend")
+            .popover(isPresented: $isShowingLegend) {
+                CalendarLegendView(
+                    title: "Availability Legend",
+                    entries: [
+                        CalendarLegendEntry(title: "Free", fill: .green.opacity(0.2)),
+                        CalendarLegendEntry(title: "Member busy", fill: .secondary.opacity(0.45)),
+                        CalendarLegendEntry(title: "Your calendar event", fill: .purple.opacity(0.45)),
+                        CalendarLegendEntry(
+                            title: "Group event",
+                            fill: .orange.opacity(0.15),
+                            stroke: .orange,
+                            dashed: true
+                        ),
+                        CalendarLegendEntry(
+                            title: "Not shared yet",
+                            fill: .clear,
+                            stroke: .secondary,
+                            dashed: true
+                        ),
+                    ]
+                )
+                .presentationCompactAdaptation(.popover)
+            }
         }
     }
 
@@ -189,7 +247,7 @@ struct DayAvailabilityView: View {
         .accessibilityHidden(true)
     }
 
-    /// Member columns with hour gridlines drawn over the top.
+    /// Member columns with group event bands and hour gridlines over the top.
     private func grid(columnWidth: CGFloat, contentWidth: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             HStack(spacing: 0) {
@@ -198,20 +256,37 @@ struct DayAvailabilityView: View {
                 }
             }
 
+            groupEventBands(contentWidth: contentWidth)
             hourLines(contentWidth: contentWidth)
         }
         .frame(width: contentWidth, height: gridHeight, alignment: .topLeading)
     }
 
     private func memberColumn(_ member: Person, columnWidth: CGFloat) -> some View {
-        let busy = calculator.busyIntervals(for: member, on: date)
+        let status = calculator.status(for: member)
+        // Deliberately not `busyIntervals`: group events are drawn once as
+        // bands across the whole grid, not repeated in every member column.
+        let busy = calculator.memberBusyIntervals(for: member, on: date)
 
         return ZStack(alignment: .topLeading) {
             // The whole window is free until a busy block says otherwise.
-            colors.green.opacity(0.12)
+            Color.green.opacity(status == .sharing || status == .mock ? 0.12 : 0.03)
 
             ForEach(Array(busy.enumerated()), id: \.offset) { _, interval in
-                busyBlock(interval, tint: member.tint, columnWidth: columnWidth)
+                busyBlock(
+                    interval,
+                    tint: member.tint,
+                    columnWidth: columnWidth,
+                    title: member.isCurrentUser
+                        ? personalEventTitle(for: interval)
+                        : nil
+                )
+            }
+
+            if status == .notSharing {
+                notSharedOverlay(columnWidth: columnWidth)
+            } else if status == .stale {
+                staleBadge()
             }
         }
         .frame(width: columnWidth, height: gridHeight)
@@ -222,10 +297,19 @@ struct DayAvailabilityView: View {
         }
     }
 
+    private func personalEventTitle(for interval: DateInterval) -> String? {
+        calendarStore.events
+            .filter { $0.linkedEventID == nil }
+            .first(where: {
+                $0.startDate < interval.end && $0.endDate > interval.start
+            })?.title
+    }
+
     private func busyBlock(
         _ interval: DateInterval,
         tint: Color,
-        columnWidth: CGFloat
+        columnWidth: CGFloat,
+        title: String?
     ) -> some View {
         let startHours = interval.start.timeIntervalSince(window.start) / 3600
         let durationHours = interval.duration / 3600
@@ -234,17 +318,119 @@ struct DayAvailabilityView: View {
         let barHeight = max(4, CGFloat(durationHours) * hourHeight - 1)
         let cornerRadius = min(8, barWidth / 3)
 
+        // At most 50% opacity, so two overlapping blocks compound rather than
+        // hide one another.
+        let fill = tint.opacity(0.4)
+
         return RoundedRectangle(cornerRadius: cornerRadius)
-            .fill(tint.opacity(0.75))
+            .fill(fill)
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(tint, lineWidth: 1)
+                    .strokeBorder(tint.opacity(0.8), lineWidth: 1)
             )
+            .overlay(alignment: .topLeading) {
+                if let title, barHeight > 20 {
+                    Text(title)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .padding(.horizontal, 3)
+                        .padding(.top, 2)
+                }
+            }
             .frame(width: barWidth, height: barHeight)
             .offset(
                 x: (columnWidth - barWidth) / 2,
                 y: CGFloat(startHours) * hourHeight
             )
+    }
+
+    /// Diagonal hatching for a member who has not published anything. Their
+    /// lane is not silently treated as free.
+    private func notSharedOverlay(columnWidth: CGFloat) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: "eye.slash")
+            Text("Not shared")
+                .font(.caption2)
+        }
+        .foregroundStyle(.secondary)
+        .frame(width: columnWidth, height: gridHeight)
+        .background {
+            Canvas { context, size in
+                var path = SwiftUI.Path()
+                let spacing: CGFloat = 12
+
+                for x in stride(
+                    from: -size.height,
+                    through: size.width,
+                    by: spacing
+                ) {
+                    path.move(to: CGPoint(x: x, y: 0))
+                    path.addLine(to: CGPoint(x: x + size.height, y: size.height))
+                }
+
+                context.stroke(
+                    path,
+                    with: .color(.secondary.opacity(0.14)),
+                    lineWidth: 1
+                )
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func staleBadge() -> some View {
+        Text("Out of date")
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(.orange)
+            .padding(2)
+            .background(.background, in: Capsule())
+            .padding(.top, 2)
+            .padding(.leading, 2)
+    }
+
+    /// One orange band per group event, spanning every member column.
+    private func groupEventBands(contentWidth: CGFloat) -> some View {
+        let events = calculator.groupEventIntervals(on: date)
+
+        return ForEach(Array(events.enumerated()), id: \.offset) { _, event in
+            groupEventBand(
+                event.interval,
+                title: event.title,
+                contentWidth: contentWidth
+            )
+        }
+    }
+
+    private func groupEventBand(
+        _ interval: DateInterval,
+        title: String,
+        contentWidth: CGFloat
+    ) -> some View {
+        let startHours = interval.start.timeIntervalSince(window.start) / 3600
+        let durationHours = interval.duration / 3600
+        let bandHeight = max(18, CGFloat(durationHours) * hourHeight - 1)
+
+        return RoundedRectangle(cornerRadius: 6)
+            .fill(Color.orange.opacity(0.15))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(
+                        Color.orange,
+                        style: StrokeStyle(lineWidth: 1.5, dash: [4, 2])
+                    )
+            }
+            .overlay(alignment: .topLeading) {
+                Text(title)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+            }
+            .frame(width: max(contentWidth - 4, 10), height: bandHeight)
+            .offset(x: 2, y: CGFloat(startHours) * hourHeight)
+            .allowsHitTesting(false)
     }
 
     /// Faint line at each hour boundary, including one at the bottom edge.
@@ -267,13 +453,31 @@ struct DayAvailabilityView: View {
     }
 }
 
-#Preview {
+#if DEBUG
+#Preview("Shared and not shared") {
     ScrollView {
         DayAvailabilityView(
             date: Date(),
-            members: TestGroup(code: "ABCD67", name: "CODZEE").members,
+            groupID: PreviewData.groupID,
             calendar: .current
         )
+        .environment(GroupStore.preview(with: PreviewData.members))
+        .environment(AvailabilityStore.preview())
         .padding()
     }
 }
+
+#Preview("Mock fallback") {
+    ScrollView {
+        DayAvailabilityView(
+            date: Date(),
+            groupID: PreviewData.groupID,
+            calendar: .current,
+            useMockFallback: true
+        )
+        .environment(GroupStore.preview(with: PreviewData.members))
+        .environment(AvailabilityStore())
+        .padding()
+    }
+}
+#endif

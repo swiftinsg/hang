@@ -3,24 +3,25 @@ import SwiftUI
 struct WeView: View {
     var sizing = Sizing()
     var colors = Colors()
+    @Environment(GroupStore.self) private var groupStore
     @State var searchQuery = ""
     @State var countPicker: Int = 0
-    @State var groups = [
-        TestGroup(code: "ABCD67", name: "CODZEE")
-    ]
     @State var showingCreateSheet = false
     @State var showingJoinSheet = false
 
     var results: [TestGroup] {
-        var filtered = groups
+        var filtered = groupStore.groups
+
         if !searchQuery.isEmpty {
             filtered = filtered.filter {
                 $0.name.localizedCaseInsensitiveContains(searchQuery)
             }
         }
+
         if countPicker != 0 {
-            filtered = filtered.filter { $0.members.count == countPicker }
+            filtered = filtered.filter { memberCount(for: $0) == countPicker }
         }
+
         return filtered
     }
 
@@ -35,14 +36,15 @@ struct WeView: View {
                 VStack {
                     LazyVGrid(columns: columns, spacing: sizing.x1) {
                         ForEach(results) { tg in
-                            if let index = groups.firstIndex(where: { $0.id == tg.id }) {
-                                NavigationLink {
-                                    GroupView(tg: $groups[index])
-                                } label: {
-                                    GroupCard(tg: tg)
-                                }
-                                .buttonStyle(setStyle(styleName: .Shrink2))
+                            NavigationLink {
+                                GroupView(groupID: tg.id ?? "")
+                            } label: {
+                                GroupCard(
+                                    tg: tg,
+                                    memberCount: memberCount(for: tg)
+                                )
                             }
+                            .buttonStyle(setStyle(styleName: .Shrink2))
                         }
                     }
                     .padding()
@@ -54,7 +56,7 @@ struct WeView: View {
                 }
             }
             .sheet(isPresented: $showingCreateSheet) {
-                CreateGroupView(tgs: $groups)
+                CreateGroupView()
                     .presentationDetents([.medium])
             }
             .sheet(isPresented: $showingJoinSheet) {
@@ -84,12 +86,20 @@ struct WeView: View {
             }
         }
     }
+
+    /// The roster is the live member count. Before it finishes loading, the
+    /// group document's `memberUids` is a good stand-in.
+    private func memberCount(for group: TestGroup) -> Int {
+        let roster = groupStore.roster(group.id ?? "")
+        return roster.isEmpty ? group.memberUids.count : roster.count
+    }
 }
 
 struct GroupCard: View {
     var sizing = Sizing()
     var colors = Colors()
     let tg: TestGroup
+    let memberCount: Int
 
     var body: some View {
         ZStack {
@@ -111,7 +121,7 @@ struct GroupCard: View {
                     .lineLimit(1)
                     .foregroundStyle(colors.txt2)
                 HStack {
-                    Text("\(tg.members.count)")
+                    Text("\(memberCount)")
                         .font(.system(size: sizing.x4, weight: .bold))
                         .foregroundStyle(colors.txt2)
                     Image(systemName: "person.2.fill")
@@ -128,6 +138,10 @@ struct GroupCard: View {
     }
 }
 
+#if DEBUG
 #Preview {
     WeView()
+        .environment(GroupStore.preview(with: PreviewData.members))
+        .environment(AvailabilityStore.preview())
 }
+#endif

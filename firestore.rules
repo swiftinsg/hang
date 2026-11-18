@@ -1,0 +1,262 @@
+rules_version = '2';
+
+// Hang — Firestore security rules.
+//
+// The privacy promise ("groups see WHEN you are busy, never WHY") is enforced
+// here as well as in the clients: an availability document has a closed
+// top-level schema with no field that could carry a title, and Hang only ever
+// writes anonymous start/end pairs into it. Nobody outside the group can read
+// it at all.
+//
+// Deploy with:  firebase deploy --only firestore:rules --project hang-138d6
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------- helpers
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isGroupMember(groupID) {
+      return signedIn()
+        && request.auth.uid in get(
+             /databases/$(database)/documents/Groups/$(groupID)
+           ).data.memberUids;
+    }
+
+    function onlyChanged(keys) {
+      return request.resource.data
+        .diff(resource.data)
+        .affectedKeys()
+        .hasOnly(keys);
+    }
+
+    // --------------------------------------------------------------- profiles
+
+    // A profile is private to its owner: other people's names reach the group
+    // through Groups/{id}/members/{uid}, not through Profiles.
+    match /Profiles/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // ----------------------------------------------------------- invite codes
+
+    // GroupCodes/{code} → { groupID, createdBy, createdAt }.
+    //
+    // The document id *is* the code. `create` only succeeds from an account
+    // that owns the group it points at, so nobody can mint an invite code for
+    // someone else's group. Codes are write-once: an existing code can never
+    // be re-pointed at a different group.
+    //
+    // Only direct lookups are allowed — no listing — so the set of outstanding
+    // codes cannot be enumerated.
+    match /GroupCodes/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+
+      allow create: if signedIn()
+        && code.matches('^[A-HJ-NP-Z0-9]{6}$')
+        && request.resource.data.keys().hasOnly(['groupID', 'createdBy', 'createdAt'])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.groupID is string
+        && get(
+             /databases/$(database)/documents/Groups/$(request.resource.data.groupID)
+           ).data.ownerUid == request.auth.uid;
+
+      allow update: if false;
+
+      // Releasing a code is possible for the account that reserved it, or for
+      // the group's current owner (ownership can be handed over).
+      allow delete: if signedIn() && (
+        resource.data.createdBy == request.auth.uid
+        || get(
+             /databases/$(database)/documents/Groups/$(resource.data.groupID)
+           ).data.ownerUid == request.auth.uid
+      );
+    }
+
+    // ----------------------------------------------------------------- groups
+
+    match /Groups/{groupID} {
+
+      // Listing groups is members-only: `where memberUids array-contains uid`
+      // can never return anyone else's group.
+      //
+      // A single document may be fetched by any signed-in account that already
+      // knows its unguessable id. That is exactly the join-by-code path: the
+      // id is only handed out by `GroupCodes/{code}`, and without it the group
+      // cannot be found. Subcollections (roster, events, availability) remain
+      // members-only, so no actual content leaks.
+      allow get: if signedIn();
+      allow list: if signedIn() && request.auth.uid in resource.data.memberUids;
+
+      // `code` starts empty and is filled in immediately after the code has
+      // been reserved, so `GroupCodes` can check group ownership.
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(
+             ['name', 'desc', 'code', 'ownerUid', 'memberUids', 'createdAt']
+           )
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.desc is string
+        && request.resource.data.desc.size() <= 500
+        && request.resource.data.code == ''
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.memberUids == [request.auth.uid]
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if signedIn() && (
+        // The owner edits details…
+        (resource.data.ownerUid == request.auth.uid
+          && onlyChanged(['name', 'desc']))
+
+        // …reserves the group's code exactly once…
+        || (resource.data.ownerUid == request.auth.uid
+          && onlyChanged(['code'])
+          && resource.data.code == ''
+          && request.resource.data.code is string
+          && request.resource.data.code.matches('^[A-HJ-NP-Z0-9]{6}$')
+          && get(
+               /databases/$(database)/documents/GroupCodes/$(request.resource.data.code)
+             ).data.groupID == groupID)
+
+        // …removes members, or hands ownership to one of them.
+        || (resource.data.ownerUid == request.auth.uid
+          && onlyChanged(['memberUids']))
+        || (resource.data.ownerUid == request.auth.uid
+          && onlyChanged(['memberUids', 'ownerUid'])
+          && request.resource.data.ownerUid in request.resource.data.memberUids)
+
+        // A signed-in person adds only themselves — this is the "join by
+        // code" half that happens after GroupCodes/{code} resolves. The group
+        // id itself is an unguessable second token: the code is the only way
+        // to learn it (see the get rule above).
+        || (onlyChanged(['memberUids'])
+          && !(request.auth.uid in resource.data.memberUids)
+          && request.auth.uid in request.resource.data.memberUids
+          && request.resource.data.memberUids.hasAll(resource.data.memberUids)
+          && request.resource.data.memberUids.size()
+               == resource.data.memberUids.size() + 1)
+
+        // A member removes only themselves.
+        || (onlyChanged(['memberUids'])
+          && request.auth.uid in resource.data.memberUids
+          && !(request.auth.uid in request.resource.data.memberUids)
+          && resource.data.memberUids.hasAll(request.resource.data.memberUids)
+          && request.resource.data.memberUids.size()
+               == resource.data.memberUids.size() - 1)
+      );
+
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+
+      // -------------------------------------------------------------- members
+      //
+      // A member document is a name and a sharing flag. It never holds
+      // calendar data: that lives in `availability`, where it cannot carry
+      // anything but times.
+      match /members/{uid} {
+        allow read: if isGroupMember(groupID);
+
+        allow create: if signedIn()
+          && request.auth.uid == uid
+          && isGroupMember(groupID)
+          && request.resource.data.keys().hasOnly(
+               ['name', 'status', 'joinedAt', 'sharingEnabled']
+             )
+          && request.resource.data.name is string
+          && request.resource.data.name.size() <= 80
+          && request.resource.data.joinedAt == request.time
+          && request.resource.data.sharingEnabled is bool;
+
+        // Only the sharing switch (and your own display name) may change.
+        allow update: if signedIn()
+          && request.auth.uid == uid
+          && isGroupMember(groupID)
+          && onlyChanged(['name', 'status', 'sharingEnabled']);
+
+        // Leaving is allowed while still a member, so the member document can
+        // be cleaned up before `memberUids` drops the account.
+        allow delete: if signedIn()
+          && request.auth.uid == uid
+          && isGroupMember(groupID);
+      }
+
+      // --------------------------------------------------------------- events
+      //
+      // Group events are the opposite of personal availability: they are
+      // created *for* the group, so their names and times are shared with
+      // everyone in it. Nothing here is imported from a private calendar.
+      match /events/{eventID} {
+        allow read: if isGroupMember(groupID);
+
+        allow create: if isGroupMember(groupID)
+          && request.resource.data.keys().hasOnly(
+               ['name', 'desc', 'startTime', 'endTime', 'createdBy']
+             )
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 120
+          && request.resource.data.desc is string
+          && request.resource.data.desc.size() <= 1000
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.startTime is timestamp
+          && request.resource.data.endTime is timestamp
+          && request.resource.data.startTime < request.resource.data.endTime;
+
+        allow update, delete: if isGroupMember(groupID);
+      }
+
+      // --------------------------------------------------------- availability
+      //
+      // THE PRIVACY BOUNDARY.
+      //
+      // The document schema is closed at the top level: exactly three fields,
+      // and none of them can carry a title, note, location, calendar name,
+      // attendee list or event id. There is no field to put one in.
+      //
+      // The day entries are the interval payload the app writes: a date plus
+      // flat [start, end] millisecond pairs. Rules cannot iterate a list (the
+      // rules language has no `all`), so each entry's *contents* cannot be
+      // type-checked server-side. That does not weaken the guarantee that
+      // matters: the writer reduces events to intervals before this document
+      // is built, and the reader decodes only the date and the number pairs.
+      // A hand-crafted write could put junk inside `days`, but no Hang client
+      // will ever read or display it.
+      //
+      // `days` is capped at 40 entries so the payload stays ~a month of busy
+      // time rather than a calendar dump.
+      match /availability/{uid} {
+        function validPayload() {
+          let data = request.resource.data;
+          return data.keys().hasOnly(['timezoneIdentifier', 'updatedAt', 'days'])
+            && data.timezoneIdentifier is string
+            && data.timezoneIdentifier.size() > 0
+            && data.timezoneIdentifier.size() <= 64
+            && data.updatedAt == request.time
+            && data.days is list
+            && data.days.size() <= 40;
+        }
+
+        // Any member can see when you are busy; nobody outside the group can.
+        allow read: if isGroupMember(groupID);
+
+        // You can only publish your own busy times, and only while you belong
+        // to the group.
+        allow create, update: if signedIn()
+          && request.auth.uid == uid
+          && isGroupMember(groupID)
+          && validPayload();
+
+        // Turning sharing off deletes the document, leaving nothing to read.
+        allow delete: if signedIn()
+          && request.auth.uid == uid
+          && isGroupMember(groupID);
+      }
+    }
+  }
+}

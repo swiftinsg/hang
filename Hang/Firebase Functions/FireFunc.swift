@@ -6,12 +6,15 @@
 //
 
 import SwiftUI
+import FirebaseCore
 import FirebaseFirestore
 import FirebaseAuth
 import Combine
 
 class SaveManager: ObservableObject {
-    private var db = Firestore.firestore()
+    /// Resolved lazily so a preview can construct this object before Firebase
+    /// has been configured.
+    private var db: Firestore { Firestore.firestore() }
     @Published var profile: ProfileData?
     // True once the first snapshot has come back (or failed), so views know the
     // difference between "still loading" and "this account really has no username".
@@ -20,6 +23,7 @@ class SaveManager: ObservableObject {
 
     // Each Apple account gets its own document: Profiles/<firebase uid>
     private var profileDocument: DocumentReference? {
+        guard FirebaseApp.app() != nil else { return nil }
         guard let uid = Auth.auth().currentUser?.uid else { return nil }
         return db.collection(Path.Firestore.profiles).document(uid)
     }
