@@ -3,16 +3,25 @@ import SwiftUI
 struct CreateEventView: View {
     @Environment(\.dismiss) private var dismiss
 
+    var colors = Colors()
     @Binding var tg: TestGroup
 
     @State private var eventName = ""
     @State private var eventDesc = ""
-    @State private var eventLocation = ""
-    @State private var eventDate: Date
+    @State private var startDate: Date
+    @State private var endDate: Date
 
     init(tg: Binding<TestGroup>, initialDate: Date = Date()) {
         _tg = tg
-        _eventDate = State(initialValue: initialDate)
+
+        // Default to a 9–10am slot on the chosen day so the time pickers start
+        // somewhere sensible instead of at midnight.
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: initialDate)
+        let start = calendar.date(byAdding: .hour, value: 9, to: day) ?? initialDate
+
+        _startDate = State(initialValue: start)
+        _endDate = State(initialValue: start.addingTimeInterval(60 * 60))
     }
 
     var body: some View {
@@ -21,41 +30,38 @@ struct CreateEventView: View {
                 Section("Details") {
                     TextField("Name", text: $eventName)
                     TextField("Description", text: $eventDesc, axis: .vertical)
-                    TextField("Location", text: $eventLocation)
                 }
 
                 Section("Date and Time") {
                     DatePicker(
-                        "Date",
-                        selection: $eventDate,
-                        displayedComponents: .date
+                        "Starts",
+                        selection: $startDate,
+                        displayedComponents: [.date, .hourAndMinute]
                     )
-                    HStack(spacing: 6) {
-                        Text("Time")
-                        Spacer()
-                        DatePicker(
-                            "",
-                            selection: $eventDate,
-                            displayedComponents: .hourAndMinute
-                        )
-                        Text("to")
-                        DatePicker(
-                            "",
-                            selection: $eventDate,
-                            displayedComponents: .hourAndMinute
-                        )
-                    }
+                    DatePicker(
+                        "Ends",
+                        selection: $endDate,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
                 }
             }
             .navigationTitle("New Event")
+            .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: startDate) { _, newStart in
+                // Keep the event at least an hour long when the start moves
+                // past the current end.
+                if endDate <= newStart {
+                    endDate = newStart.addingTimeInterval(60 * 60)
+                }
+            }
             .toolbar {
-                //                ToolbarItem(placement: .cancellationAction) {
-                //                    Button("Cancel") {
-                //                        dismiss()
-                //                    }
-                //                }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Confirm", systemImage: "checkmark") {
+                    Button("Add") {
                         tg.events.append(
                             GroupEvents(
                                 name: eventName.trimmingCharacters(
@@ -64,19 +70,22 @@ struct CreateEventView: View {
                                 desc: eventDesc.trimmingCharacters(
                                     in: .whitespacesAndNewlines
                                 ),
-                                time: eventDate.timeIntervalSince1970
+                                time: startDate.timeIntervalSince1970,
+                                endTime: endDate.timeIntervalSince1970
                             )
                         )
                         dismiss()
                     }
-                    .disabled(
-                        eventName.trimmingCharacters(
-                            in: .whitespacesAndNewlines
-                        ).isEmpty
-                    )
+                    .tint(colors.dgreen)
+                    .disabled(!canSave)
                 }
             }
         }
+    }
+
+    private var canSave: Bool {
+        !eventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && endDate > startDate
     }
 }
 

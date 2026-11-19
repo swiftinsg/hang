@@ -1,21 +1,21 @@
+import EventKit
 import SwiftUI
 
 struct MeView: View {
-    @FocusState var isFocused: Bool
+    // Keep the group in state so events added from this screen actually stay
+    // in the calendar instead of being written to a throwaway value.
+    @State private var tg = TestGroup(
+        code: "HELLO1", name: "CODZEE",
+        events: [
+            GroupEvents(name: "event1", time: 1_720_708_600),
+            GroupEvents(name: "event2", time: 1_790_403_500),
+        ]
+    )
 
     var body: some View {
         NavigationStack {
             VStack {
-                PersonalCalendarView( tg: .constant(
-                    TestGroup(
-                        code: "HELLO1", name: "CODZEE",
-                        events: [
-                            GroupEvents(name: "event1", time: 1_720_708_600),
-                            GroupEvents(name: "event2", time: 1_790_403_500),
-                        ]
-                    )
-                )
-)
+                PersonalCalendarView(tg: $tg)
             }
             .navigationTitle("My Calendar")
             .toolbarTitleDisplayMode(.inlineLarge)
@@ -24,10 +24,8 @@ struct MeView: View {
                     NavigationLink(destination: ProfileView()) {
                         Label("Profile", systemImage: "person.fill")
                     }
-
                 }
             }
-
         }
     }
 }
@@ -50,7 +48,7 @@ struct PersonalCalendarView: View {
     @State private var displayedMonth: Date = Date()
     @State private var selectedDate: Date? = Date()
     @State private var isShowingCreateEvent = false
-
+    @State private var calendarStore = PersonalCalendarStore.shared
 
     // MARK: - Month grid
 
@@ -132,19 +130,38 @@ struct PersonalCalendarView: View {
     }
 
     var body: some View {
-        // The whole calendar scrolls as one page, so the availability timeline
-        // below the month grid stays fully visible without its own scroller.
+        // The whole calendar scrolls as one page, so the day timeline below
+        // the month grid stays fully visible without its own scroller.
         ScrollView {
             VStack(spacing: 2) {
                 monthHeader
+
+                if !calendarStore.hasFullAccess {
+                    calendarAccessBanner
+                        .padding(.top, 8)
+                }
+
                 monthGrid
 
                 Divider()
                     .padding(.vertical, 8)
 
-               
+                PersonalDayTimelineView(
+                    date: selectedDate ?? Date(),
+                    personalEvents: calendarStore.events,
+                    appEvents: tg.events,
+                    calendar: calendar
+                )
             }
             .padding(15)
+            // Leave room so the floating add button never covers the last row.
+            .padding(.bottom, 60)
+        }
+        .task {
+            await calendarStore.requestAccessIfNeeded()
+        }
+        .onAppear {
+            calendarStore.loadEventsIfAuthorized()
         }
         .overlay(alignment: .bottomTrailing) {
             createEventButton
@@ -154,6 +171,42 @@ struct PersonalCalendarView: View {
                 tg: $tg,
                 initialDate: selectedDate ?? Date()
             )
+            .presentationDetents([.medium, .large])
+        }
+    }
+
+    // MARK: - Calendar access
+
+    @ViewBuilder
+    private var calendarAccessBanner: some View {
+        if calendarStore.authorizationStatus == .notDetermined
+            || calendarStore.authorizationStatus == .writeOnly {
+            Button {
+                Task { await calendarStore.requestAccessIfNeeded() }
+            } label: {
+                Label("Import your calendar", systemImage: "calendar.badge.plus")
+                    .font(.subheadline.weight(.medium))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .foregroundStyle(colors.dgreen)
+                    .background(
+                        colors.green.opacity(0.15),
+                        in: RoundedRectangle(cornerRadius: 8)
+                    )
+            }
+            .buttonStyle(.plain)
+        } else if calendarStore.authorizationStatus == .denied
+                    || calendarStore.authorizationStatus == .restricted {
+            HStack(spacing: 6) {
+                Image(systemName: "calendar.badge.exclamationmark")
+                    .foregroundStyle(.orange)
+                Text("Calendar access is off. Enable it in Settings to see your events here.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(8)
+            .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
         }
     }
 
@@ -189,7 +242,6 @@ struct PersonalCalendarView: View {
 
     private var monthGrid: some View {
         let days = generateMonthGrid()
-        
 
         return LazyVGrid(
             columns: Array(
@@ -216,15 +268,15 @@ struct PersonalCalendarView: View {
         let isSelected =
             selectedDate.map { calendar.isDate($0, inSameDayAs: date) } ?? false
 
-        let hasEvents = tg.events.contains {
+        let personalEventsToday = calendarStore.events(on: date, calendar: calendar)
+        let hasPersonalEvents = !personalEventsToday.isEmpty
+        let hasAppEvents = tg.events.contains {
             calendar.isDate(
                 Date(timeIntervalSince1970: $0.time),
                 inSameDayAs: date
             )
         }
-
-       
-
+        let hasEvents = hasPersonalEvents || hasAppEvents
 
         return Button {
             selectedDate = date
@@ -234,15 +286,18 @@ struct PersonalCalendarView: View {
                 .frame(maxWidth: .infinity, minHeight: 45)
                 .overlay(alignment: .bottom) {
                     if hasEvents {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.orange)
-                            .padding(.bottom, 4)
+                        HStack(spacing: 2) {
+                            if hasPersonalEvents {
+                                Image(systemName: "calendar")
+                            }
+                            
+                        }
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.orange)
+                        .padding(.bottom, 4)
                     }
                 }
                 .foregroundStyle(isCurrentMonth ? .primary : .secondary)
-             
-                
                 .overlay {
                     // Days that already have an event.
                     if hasEvents {

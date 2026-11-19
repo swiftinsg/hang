@@ -46,6 +46,8 @@ public struct GroupEvents: Hashable, Identifiable {
     var name: String
     var desc: String = "Add description here..."
     var time: Double
+    /// Optional end time. Events created before this was added only store a start.
+    var endTime: Double? = nil
 }
 
 public struct Person: Hashable, Identifiable {

@@ -10,6 +10,6 @@ import Foundation
 struct Path {
     struct Firestore {
         // One collection that holds one document per signed-in Apple account.
-        static let profiles = "Profiles"
+        static let Users = "Users"
     }
 }

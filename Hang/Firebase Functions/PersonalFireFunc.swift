@@ -21,11 +21,21 @@ class SaveManager: ObservableObject {
     // Each Apple account gets its own document: Profiles/<firebase uid>
     private var profileDocument: DocumentReference? {
         guard let uid = Auth.auth().currentUser?.uid else { return nil }
-        return db.collection(Path.Firestore.profiles).document(uid)
+        return db.collection(Path.Firestore.Users).document(uid)
     }
 
     // Create / update the signed-in user's own profile
     func saveUsername(_ username: String) {
+        guard let profileDocument else { return }
+        do {
+            // merge: true keeps the userId field written by FirebaseSignInWithApple
+            try profileDocument.setData(from: ProfileData(username: username), merge: true)
+        } catch {
+            print("Error saving profile: \(error)")
+        }
+    }
+    
+    func saveEvents(_ username: String) {
         guard let profileDocument else { return }
         do {
             // merge: true keeps the userId field written by FirebaseSignInWithApple
@@ -71,7 +81,7 @@ class SaveManager: ObservableObject {
     func deleteProfile(_ profile: ProfileData) {
         guard let profileID = profile.id else { return }
 
-        db.collection(Path.Firestore.profiles).document(profileID).delete { error in
+        db.collection(Path.Firestore.Users).document(profileID).delete { error in
             if let error {
                 print("Error deleting profile: \(error)")
             }

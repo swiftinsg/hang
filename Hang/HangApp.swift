@@ -21,7 +21,7 @@ struct SwiftChallenge2App: App {
         WindowGroup {
             MainView()
                 // FirebaseSignInWithApple creates Profiles/<uid> for every new account
-                .configureFirebaseSignInWithAppleWith(firestoreUserCollectionPath: Path.Firestore.profiles)
+                .configureFirebaseSignInWithAppleWith(firestoreUserCollectionPath: Path.Firestore.Users)
         }
     }
 }
