@@ -2,8 +2,8 @@
 //  PersonalDayTimelineView.swift
 //  Hang
 //
-//  Shows the person's imported calendar events and Hang events for one day on
-//  an hour-by-hour timeline, using Hang's green colour scheme.
+//  Shows one day of the personal calendar: imported device-calendar events,
+//  events created in Me, and events shared from the group calendar in We.
 //
 
 import SwiftUI
@@ -11,9 +11,14 @@ import SwiftUI
 struct PersonalDayTimelineView: View {
     var colors = Colors()
     let date: Date
-    let personalEvents: [PersonalCalendarEvent]
-    let appEvents: [GroupEvents]
+    let importedEvents: [PersonalCalendarEvent]
+    let personalEvents: [GroupEvents]
+    let groupEvents: [GroupEvents]
     let calendar: Calendar
+
+    /// Called when a personal event is tapped. Group events stay read only on
+    /// this screen because they belong to the We calendar.
+    var onEditPersonalEvent: ((GroupEvents) -> Void)? = nil
 
     private let hourHeight: CGFloat = 34
     private let gutterWidth: CGFloat = 48
@@ -44,45 +49,60 @@ struct PersonalDayTimelineView: View {
         calendar.startOfDay(for: date)
     }
 
-    private var dayPersonalEvents: [PersonalCalendarEvent] {
-        guard let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) else {
-            return []
-        }
+    private var dayEnd: Date {
+        calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+    }
 
-        return personalEvents.filter { event in
+    private var dayImportedEvents: [PersonalCalendarEvent] {
+        importedEvents.filter { event in
             event.startDate < dayEnd && event.endDate > dayStart
         }
     }
 
-    /// Hang events that start on the selected day, in time order.
-    private var dayAppEvents: [GroupEvents] {
-        appEvents
-            .filter { calendar.isDate(appEventStart($0), inSameDayAs: date) }
+    /// Events created in Me.
+    private var dayPersonalEvents: [GroupEvents] {
+        personalEvents
+            .filter { $0.startDate < dayEnd && $0.endDate > dayStart }
             .sorted { $0.time < $1.time }
     }
 
-    private var allDayPersonalEvents: [PersonalCalendarEvent] {
-        dayPersonalEvents.filter { $0.isAllDay }
+    /// Events shared from the group calendar in We. These are read only here.
+    private var dayGroupEvents: [GroupEvents] {
+        groupEvents
+            .filter { $0.startDate < dayEnd && $0.endDate > dayStart }
+            .sorted { $0.time < $1.time }
     }
 
-    private var timedPersonalEvents: [PersonalCalendarEvent] {
-        dayPersonalEvents.filter { event in
+    private var allDayImportedEvents: [PersonalCalendarEvent] {
+        dayImportedEvents.filter { $0.isAllDay }
+    }
+
+    private var timedImportedEvents: [PersonalCalendarEvent] {
+        dayImportedEvents.filter { event in
             !event.isAllDay && overlaps(event.startDate, event.endDate, window)
         }
     }
 
-    private var timedAppEvents: [GroupEvents] {
-        dayAppEvents.filter { event in
-            overlaps(appEventStart(event), appEventEnd(event), window)
+    private var timedPersonalEvents: [GroupEvents] {
+        dayPersonalEvents.filter { event in
+            overlaps(event.startDate, event.endDate, window)
+        }
+    }
+
+    private var timedGroupEvents: [GroupEvents] {
+        dayGroupEvents.filter { event in
+            overlaps(event.startDate, event.endDate, window)
         }
     }
 
     private var hasEvents: Bool {
-        !dayPersonalEvents.isEmpty || !dayAppEvents.isEmpty
+        !dayImportedEvents.isEmpty
+            || !dayPersonalEvents.isEmpty
+            || !dayGroupEvents.isEmpty
     }
 
     private var eventCount: Int {
-        dayPersonalEvents.count + dayAppEvents.count
+        dayImportedEvents.count + dayPersonalEvents.count + dayGroupEvents.count
     }
 
     private var timelineHeight: CGFloat {
@@ -100,7 +120,7 @@ struct PersonalDayTimelineView: View {
             header
 
             if hasEvents {
-                if !allDayPersonalEvents.isEmpty {
+                if !allDayImportedEvents.isEmpty {
                     allDayEvents
                 }
 
@@ -151,7 +171,7 @@ struct PersonalDayTimelineView: View {
                             fill: colors.dgreen.opacity(0.85)
                         ),
                         CalendarLegendEntry(
-                            title: "Hang event",
+                            title: "From your groups",
                             fill: .orange.opacity(0.15),
                             stroke: .orange,
                             dashed: true
@@ -165,7 +185,7 @@ struct PersonalDayTimelineView: View {
 
     private var allDayEvents: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(allDayPersonalEvents) { event in
+            ForEach(allDayImportedEvents) { event in
                 HStack(spacing: 5) {
                     Image(systemName: "sun.max.fill")
                         .font(.caption2)
@@ -184,8 +204,8 @@ struct PersonalDayTimelineView: View {
         }
     }
 
-    /// A single-column timeline of the selected day. Imported calendar events
-    /// are solid green and Hang events are dashed orange outlines.
+    /// A single-column timeline of the selected day. Your calendar events are
+    /// solid green and events shared from We are dashed orange outlines.
     private var timeline: some View {
         HStack(alignment: .top, spacing: 6) {
             hourGutter
@@ -197,7 +217,7 @@ struct PersonalDayTimelineView: View {
 
                     hourLines
 
-                    ForEach(timedPersonalEvents) { event in
+                    ForEach(timedImportedEvents) { event in
                         timelineBlock(
                             start: event.startDate,
                             end: event.endDate,
@@ -207,10 +227,23 @@ struct PersonalDayTimelineView: View {
                         )
                     }
 
-                    ForEach(timedAppEvents) { event in
+                    ForEach(timedPersonalEvents) { event in
                         timelineBlock(
-                            start: appEventStart(event),
-                            end: appEventEnd(event),
+                            start: event.startDate,
+                            end: event.endDate,
+                            title: event.name,
+                            isPersonal: true,
+                            width: proxy.size.width,
+                            onTap: {
+                                onEditPersonalEvent?(event)
+                            }
+                        )
+                    }
+
+                    ForEach(timedGroupEvents) { event in
+                        timelineBlock(
+                            start: event.startDate,
+                            end: event.endDate,
                             title: event.name,
                             isPersonal: false,
                             width: proxy.size.width
@@ -265,7 +298,8 @@ struct PersonalDayTimelineView: View {
         end: Date,
         title: String,
         isPersonal: Bool,
-        width: CGFloat
+        width: CGFloat,
+        onTap: (() -> Void)? = nil
     ) -> some View {
         let visibleStart = max(start, window.start)
         let visibleEnd = min(end, window.end)
@@ -279,7 +313,7 @@ struct PersonalDayTimelineView: View {
             isPersonal ? colors.dgreen.opacity(0.85) : Color.orange.opacity(0.15)
         let strokeColor = isPersonal ? colors.dgreen : Color.orange
 
-        return RoundedRectangle(cornerRadius: 6)
+        let block = RoundedRectangle(cornerRadius: 6)
             .fill(fillColor)
             .overlay {
                 RoundedRectangle(cornerRadius: 6)
@@ -302,23 +336,45 @@ struct PersonalDayTimelineView: View {
                 }
             }
             .frame(width: blockWidth, height: height)
-            .offset(x: 4, y: y)
+
+        return Group {
+            if let onTap {
+                Button(action: onTap) {
+                    block
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(title)
+                .accessibilityHint("Edit or delete this event")
+            } else {
+                block
+                    .allowsHitTesting(false)
+            }
+        }
+        .offset(x: 4, y: y)
     }
 
     private var eventList: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !dayPersonalEvents.isEmpty {
+            if !dayImportedEvents.isEmpty {
                 eventSection(title: "Your calendar", icon: "calendar") {
+                    ForEach(dayImportedEvents) { event in
+                        importedEventRow(event)
+                    }
+                }
+            }
+
+            if !dayPersonalEvents.isEmpty {
+                eventSection(title: "Your events", icon: "calendar.badge.plus") {
                     ForEach(dayPersonalEvents) { event in
                         personalEventRow(event)
                     }
                 }
             }
 
-            if !dayAppEvents.isEmpty {
-                eventSection(title: "Hang events", icon: "person.3.fill") {
-                    ForEach(dayAppEvents) { event in
-                        appEventRow(event)
+            if !dayGroupEvents.isEmpty {
+                eventSection(title: "From your groups", icon: "person.3.fill") {
+                    ForEach(dayGroupEvents) { event in
+                        groupEventRow(event)
                     }
                 }
             }
@@ -339,7 +395,7 @@ struct PersonalDayTimelineView: View {
         }
     }
 
-    private func personalEventRow(_ event: PersonalCalendarEvent) -> some View {
+    private func importedEventRow(_ event: PersonalCalendarEvent) -> some View {
         HStack(alignment: .top, spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(colors.dgreen)
@@ -364,7 +420,51 @@ struct PersonalDayTimelineView: View {
         }
     }
 
-    private func appEventRow(_ event: GroupEvents) -> some View {
+    private func personalEventRow(_ event: GroupEvents) -> some View {
+        Group {
+            if let onEditPersonalEvent {
+                Button {
+                    onEditPersonalEvent(event)
+                } label: {
+                    personalEventRowContent(event)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.primary)
+                .accessibilityHint("Edit or delete this event")
+            } else {
+                personalEventRowContent(event)
+            }
+        }
+    }
+
+    private func personalEventRowContent(_ event: GroupEvents) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(colors.dgreen)
+                .frame(width: 3)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.name)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(2)
+
+                if !event.desc.isEmpty {
+                    Text(event.desc)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Text(timeText(for: event))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func groupEventRow(_ event: GroupEvents) -> some View {
         HStack(alignment: .top, spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(Color.orange)
@@ -382,11 +482,9 @@ struct PersonalDayTimelineView: View {
                         .lineLimit(2)
                 }
 
-                Text(
-                    "\(Self.timeFormatter.string(from: appEventStart(event))) – \(Self.timeFormatter.string(from: appEventEnd(event)))"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text(timeText(for: event))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer(minLength: 0)
@@ -409,24 +507,16 @@ struct PersonalDayTimelineView: View {
 
     // MARK: - Helpers
 
-    private func appEventStart(_ event: GroupEvents) -> Date {
-        Date(timeIntervalSince1970: event.time)
-    }
-
-    private func appEventEnd(_ event: GroupEvents) -> Date {
-        if let endTime = event.endTime {
-            return Date(timeIntervalSince1970: endTime)
-        }
-        // Older events only store a start time, so show them for an hour.
-        return appEventStart(event).addingTimeInterval(60 * 60)
-    }
-
     private func timeText(for event: PersonalCalendarEvent) -> String {
         if event.isAllDay {
             return "All day"
         }
         return
             "\(Self.timeFormatter.string(from: event.startDate)) – \(Self.timeFormatter.string(from: event.endDate))"
+    }
+
+    private func timeText(for event: GroupEvents) -> String {
+        "\(Self.timeFormatter.string(from: event.startDate)) – \(Self.timeFormatter.string(from: event.endDate))"
     }
 
     private func hourLabel(for hour: Int) -> String {
@@ -450,7 +540,7 @@ struct PersonalDayTimelineView: View {
     return ScrollView {
         PersonalDayTimelineView(
             date: today,
-            personalEvents: [
+            importedEvents: [
                 PersonalCalendarEvent(
                     id: "1",
                     title: "Dentist",
@@ -460,7 +550,16 @@ struct PersonalDayTimelineView: View {
                     calendarTitle: "Personal"
                 )
             ],
-            appEvents: [
+            personalEvents: [
+                GroupEvents(
+                    name: "Gym",
+                    time: (calendar.date(byAdding: .hour, value: 12, to: day) ?? today)
+                        .timeIntervalSince1970,
+                    endTime: (calendar.date(byAdding: .hour, value: 13, to: day) ?? today)
+                        .timeIntervalSince1970
+                )
+            ],
+            groupEvents: [
                 GroupEvents(
                     name: "Dinner",
                     desc: "Group dinner",

@@ -5,14 +5,12 @@ struct WeView: View {
     var colors = Colors()
     @State var searchQuery = ""
     @State var countPicker: Int = 0
-    @State var groups = [
-        TestGroup(code: "ABCD67", name: "CODZEE")
-    ]
+    @State private var store = GroupStore.shared
     @State var showingCreateSheet = false
     @State var showingJoinSheet = false
 
     var results: [TestGroup] {
-        var filtered = groups
+        var filtered = store.groups
         if !searchQuery.isEmpty {
             filtered = filtered.filter {
                 $0.name.localizedCaseInsensitiveContains(searchQuery)
@@ -30,14 +28,16 @@ struct WeView: View {
     @FocusState var isFocused: Bool
 
     var body: some View {
+        @Bindable var store = store
+
         NavigationStack {
             ScrollView {
                 VStack {
                     LazyVGrid(columns: columns, spacing: sizing.x1) {
                         ForEach(results) { tg in
-                            if let index = groups.firstIndex(where: { $0.id == tg.id }) {
+                            if let index = store.groups.firstIndex(where: { $0.id == tg.id }) {
                                 NavigationLink {
-                                    GroupView(tg: $groups[index])
+                                    GroupView(tg: $store.groups[index])
                                 } label: {
                                     GroupCard(tg: tg)
                                 }
@@ -54,7 +54,7 @@ struct WeView: View {
                 }
             }
             .sheet(isPresented: $showingCreateSheet) {
-                CreateGroupView(tgs: $groups)
+                CreateGroupView(tgs: $store.groups)
                     .presentationDetents([.medium])
             }
             .sheet(isPresented: $showingJoinSheet) {

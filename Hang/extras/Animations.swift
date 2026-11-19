@@ -50,6 +50,21 @@ public struct GroupEvents: Hashable, Identifiable {
     var endTime: Double? = nil
 }
 
+extension GroupEvents {
+    /// The moment the event starts.
+    var startDate: Date {
+        Date(timeIntervalSince1970: time)
+    }
+
+    /// The moment the event ends. Older events without an end time last one hour.
+    var endDate: Date {
+        if let endTime {
+            return Date(timeIntervalSince1970: endTime)
+        }
+        return startDate.addingTimeInterval(60 * 60)
+    }
+}
+
 public struct Person: Hashable, Identifiable {
     public let id = UUID()
     var name: String

@@ -1,5 +1,19 @@
 import SwiftUI
 
+private enum GroupCalendarSheet: Identifiable {
+    case create
+    case edit(GroupEvents)
+
+    var id: String {
+        switch self {
+        case .create:
+            return "create"
+        case .edit(let event):
+            return "edit-\(event.id.uuidString)"
+        }
+    }
+}
+
 public enum GroupTab: String, CaseIterable, Identifiable {
     case cal = "Calendar"
     case events = "Events"
@@ -68,9 +82,16 @@ struct CalendarView: View {
 
     @State private var displayedMonth: Date = Date()
     @State private var selectedDate: Date? = Date()
-    @State private var isShowingCreateEvent = false
+    @State private var activeSheet: GroupCalendarSheet?
+    @State private var calendarStore = PersonalCalendarStore.shared
+    @State private var personalStore = PersonalEventsStore.shared
 
     private var members: [Person] { tg.members }
+
+    /// Your personal calendar appears as an extra, read-only member column.
+    private var calendarMembers: [Person] {
+        [Person.currentUser] + members
+    }
 
     private var availability: AvailabilityCalculator {
         AvailabilityCalculator(calendar: calendar)
@@ -168,8 +189,14 @@ struct CalendarView: View {
 
                 DayAvailabilityView(
                     date: selectedDate ?? Date(),
-                    members: members,
-                    calendar: calendar
+                    members: calendarMembers,
+                    calendar: calendar,
+                    groupEvents: tg.events,
+                    personalEvents: personalStore.events,
+                    importedEvents: calendarStore.events,
+                    onEditGroupEvent: { event in
+                        activeSheet = .edit(event)
+                    }
                 )
             }
             .padding(15)
@@ -177,11 +204,24 @@ struct CalendarView: View {
         .overlay(alignment: .bottomTrailing) {
             createEventButton
         }
-        .sheet(isPresented: $isShowingCreateEvent) {
-            CreateEventView(
-                tg: $tg,
-                initialDate: selectedDate ?? Date()
-            )
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .create:
+                CreateEventView(
+                    tg: $tg,
+                    initialDate: selectedDate ?? Date()
+                )
+                .presentationDetents([.medium, .large])
+            case .edit(let event):
+                EditEventView(
+                    events: $tg.events,
+                    eventID: event.id
+                )
+                .presentationDetents([.medium, .large])
+            }
+        }
+        .task {
+            calendarStore.loadEventsIfAuthorized()
         }
     }
 
@@ -244,12 +284,19 @@ struct CalendarView: View {
         let isSelected =
             selectedDate.map { calendar.isDate($0, inSameDayAs: date) } ?? false
 
-        let hasEvents = tg.events.contains {
-            calendar.isDate(
-                Date(timeIntervalSince1970: $0.time),
-                inSameDayAs: date
-            )
+        let dayStart = calendar.startOfDay(for: date)
+        let dayEnd =
+            calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+
+        let importedEventsToday = calendarStore.events(on: date, calendar: calendar)
+        let hasImportedEvents = !importedEventsToday.isEmpty
+        let hasPersonalEvents = personalStore.events.contains { event in
+            event.startDate < dayEnd && event.endDate > dayStart
         }
+        let hasGroupEvents = tg.events.contains { event in
+            event.startDate < dayEnd && event.endDate > dayStart
+        }
+        let hasCalendarEvents = hasImportedEvents || hasPersonalEvents
 
         let isTopAvailable =
             topAvailableDays.contains(calendar.startOfDay(for: date))
@@ -266,12 +313,14 @@ struct CalendarView: View {
                 .font(.subheadline)
                 .frame(maxWidth: .infinity, minHeight: 45)
                 .overlay(alignment: .bottom) {
-                    if hasEvents {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.orange)
-                            .padding(.bottom, 4)
-                    }
+                        HStack(spacing: 2) {
+                            if hasGroupEvents {
+                                Image(systemName: "person.3")
+                            }
+                        }
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.orange)
+                        .padding(.bottom, 4)
                 }
                 .foregroundStyle(isCurrentMonth ? .primary : .secondary)
                 .background(
@@ -292,7 +341,7 @@ struct CalendarView: View {
                 }
                 .overlay {
                     // Days that already have an event.
-                    if hasEvents {
+                    if hasGroupEvents {
                         RoundedRectangle(cornerRadius: 6)
                             .strokeBorder(Color.orange, lineWidth: 2)
                             .padding(2)
@@ -327,7 +376,7 @@ struct CalendarView: View {
     // reachable while the calendar page is scrolled.
     private var createEventButton: some View {
         Button {
-            isShowingCreateEvent = true
+            activeSheet = .create
         } label: {
             Image(systemName: "plus")
                 .font(.title2.weight(.semibold))
@@ -346,43 +395,55 @@ struct EventView: View {
     var colors = Colors()
     @Binding var tg: TestGroup
     @State private var showAddView = false
+    @State private var activeSheet: GroupCalendarSheet?
     var body: some View {
-        List {
-            ForEach($tg.events) { $event in
-                VStack(alignment: .leading) {
-                    HStack {
-                        Text(event.name)
-                            .font(.system(size: sizing.x4))
-                        Divider()
-                            .frame(width: 1)
-                            .overlay(.black)
-                        Text(
-                            Date(timeIntervalSince1970: event.time)
-                                .formatted(date: .numeric, time: .shortened)
-                        )
-                        .font(.system(size: sizing.x4))
+            List {
+                ForEach($tg.events) { $event in
+                    Button {
+                        activeSheet = .edit(event)
+                    } label: {
+                        VStack(alignment: .leading) {
+                            HStack {
+                                Text(event.name)
+                                    .font(.system(size: sizing.x4))
+                                Divider()
+                                    .frame(width: 1)
+                                    .overlay(.black)
+                                Text(
+                                    Date(timeIntervalSince1970: event.time)
+                                        .formatted(date: .numeric, time: .shortened)
+                                )
+                                .font(.system(size: sizing.x4))
+                            }
+                            Text(event.desc)
+                                .font(.system(size: sizing.x3))
+                                .lineLimit(1)
+                        }
                     }
-                    Text(event.desc)
-                        .font(.system(size: sizing.x3))
-                        .lineLimit(1)
+                    .listRowBackground(Color(.systemGray6))
+                    .tint(Color.black)
                 }
-                .listRowBackground(Color(.systemGray6))
             }
-            Button {
-                showAddView.toggle()
-            } label: {
-                Text("+ Add New Event")
-                    .font(.system(size: sizing.x4))
-                    
-            } .listRowBackground(Color(.systemGray6))
-        }
+
         .padding(.top, -sizing.x4)
         .scrollContentBackground(.hidden)
-        .sheet(isPresented: $showAddView) {
-            CreateEventView(tg: $tg)
-                .presentationDetents([.medium])
-                .presentationBackground(.ultraThinMaterial)
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .create:
+                CreateEventView(
+                    tg: $tg,
+                    initialDate: Date()
+                )
+                .presentationDetents([.medium, .large])
+            case .edit(let event):
+                EditEventView(
+                    events: $tg.events,
+                    eventID: event.id
+                )
+                .presentationDetents([.medium, .large])
+            }
         }
+        
     }
 }
 

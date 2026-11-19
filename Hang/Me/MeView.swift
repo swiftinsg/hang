@@ -1,21 +1,35 @@
 import EventKit
 import SwiftUI
 
+private enum PersonalCalendarSheet: Identifiable {
+    case create
+    case edit(GroupEvents)
+
+    var id: String {
+        switch self {
+        case .create:
+            return "create"
+        case .edit(let event):
+            return "edit-\(event.id.uuidString)"
+        }
+    }
+}
+
 struct MeView: View {
-    // Keep the group in state so events added from this screen actually stay
-    // in the calendar instead of being written to a throwaway value.
-    @State private var tg = TestGroup(
-        code: "HELLO1", name: "CODZEE",
-        events: [
-            GroupEvents(name: "event1", time: 1_720_708_600),
-            GroupEvents(name: "event2", time: 1_790_403_500),
-        ]
-    )
+    // Personal events are owned here. Group events are read from the shared
+    // We store, so anything added in We appears here (one-way sync).
+    @State private var groupStore = GroupStore.shared
+    @State private var personalStore = PersonalEventsStore.shared
 
     var body: some View {
+        @Bindable var personalStore = personalStore
+
         NavigationStack {
             VStack {
-                PersonalCalendarView(tg: $tg)
+                PersonalCalendarView(
+                    personalEvents: $personalStore.events,
+                    groupEvents: groupStore.groups.first?.events ?? []
+                )
             }
             .navigationTitle("My Calendar")
             .toolbarTitleDisplayMode(.inlineLarge)
@@ -37,7 +51,8 @@ struct MeView: View {
 struct PersonalCalendarView: View {
     var sizing = Sizing()
     var colors = Colors()
-    @Binding var tg: TestGroup
+    @Binding var personalEvents: [GroupEvents]
+    let groupEvents: [GroupEvents]
 
     private let calendar: Calendar = {
         var calendar = Calendar.current
@@ -47,7 +62,7 @@ struct PersonalCalendarView: View {
 
     @State private var displayedMonth: Date = Date()
     @State private var selectedDate: Date? = Date()
-    @State private var isShowingCreateEvent = false
+    @State private var activeSheet: PersonalCalendarSheet?
     @State private var calendarStore = PersonalCalendarStore.shared
 
     // MARK: - Month grid
@@ -148,9 +163,13 @@ struct PersonalCalendarView: View {
 
                 PersonalDayTimelineView(
                     date: selectedDate ?? Date(),
-                    personalEvents: calendarStore.events,
-                    appEvents: tg.events,
-                    calendar: calendar
+                    importedEvents: calendarStore.events,
+                    personalEvents: personalEvents,
+                    groupEvents: groupEvents,
+                    calendar: calendar,
+                    onEditPersonalEvent: { event in
+                        activeSheet = .edit(event)
+                    }
                 )
             }
             .padding(15)
@@ -166,12 +185,21 @@ struct PersonalCalendarView: View {
         .overlay(alignment: .bottomTrailing) {
             createEventButton
         }
-        .sheet(isPresented: $isShowingCreateEvent) {
-            CreateEventView(
-                tg: $tg,
-                initialDate: selectedDate ?? Date()
-            )
-            .presentationDetents([.medium, .large])
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .create:
+                CreatePersonalEventView(
+                    events: $personalEvents,
+                    initialDate: selectedDate ?? Date()
+                )
+                .presentationDetents([.large])
+            case .edit(let event):
+                EditEventView(
+                    events: $personalEvents,
+                    eventID: event.id
+                )
+                .presentationDetents([.medium, .large])
+            }
         }
     }
 
@@ -268,15 +296,23 @@ struct PersonalCalendarView: View {
         let isSelected =
             selectedDate.map { calendar.isDate($0, inSameDayAs: date) } ?? false
 
-        let personalEventsToday = calendarStore.events(on: date, calendar: calendar)
-        let hasPersonalEvents = !personalEventsToday.isEmpty
-        let hasAppEvents = tg.events.contains {
-            calendar.isDate(
-                Date(timeIntervalSince1970: $0.time),
-                inSameDayAs: date
-            )
+        let dayStart = calendar.startOfDay(for: date)
+        let dayEnd =
+            calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+
+        let importedEventsToday = calendarStore.events(on: date, calendar: calendar)
+        let hasImportedEvents = !importedEventsToday.isEmpty
+
+        // Highlight every day an event covers, including the days in between
+        // its start and end, so selecting a middle day still shows the event.
+        let hasPersonalEvents = personalEvents.contains { event in
+            event.startDate < dayEnd && event.endDate > dayStart
         }
-        let hasEvents = hasPersonalEvents || hasAppEvents
+        let hasGroupEvents = groupEvents.contains { event in
+            event.startDate < dayEnd && event.endDate > dayStart
+        }
+        let hasCalendarEvents = hasImportedEvents || hasPersonalEvents
+        let hasEvents = hasCalendarEvents || hasGroupEvents
 
         return Button {
             selectedDate = date
@@ -287,10 +323,12 @@ struct PersonalCalendarView: View {
                 .overlay(alignment: .bottom) {
                     if hasEvents {
                         HStack(spacing: 2) {
-                            if hasPersonalEvents {
+                            if hasCalendarEvents {
                                 Image(systemName: "calendar")
                             }
-                            
+                            if hasGroupEvents {
+                                Image(systemName: "person.3")
+                            }
                         }
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.orange)
@@ -320,7 +358,7 @@ struct PersonalCalendarView: View {
     // reachable while the calendar page is scrolled.
     private var createEventButton: some View {
         Button {
-            isShowingCreateEvent = true
+            activeSheet = .create
         } label: {
             Image(systemName: "plus")
                 .font(.title2.weight(.semibold))

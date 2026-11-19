@@ -11,6 +11,13 @@
 import SwiftUI
 
 extension Person {
+    /// The signed-in person. The group calendar shows their personal calendar
+    /// as an extra, read-only member column.
+    static let currentUser = Person(
+        name: "You",
+        status: "Your personal calendar"
+    )
+
     /// Stable per-member colour used for avatars and busy blocks.
     var tint: Color {
         let palette: [Color] = [
@@ -28,8 +35,8 @@ extension Person {
 
 /// The part of the day that availability is compared over.
 enum AvailabilityDay {
-    static let startHour = 8
-    static let endHour = 22
+    static let startHour = 1
+    static let endHour = 23
 }
 
 struct AvailabilityCalculator {

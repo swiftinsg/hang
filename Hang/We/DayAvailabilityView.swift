@@ -2,7 +2,8 @@
 //  DayAvailabilityView.swift
 //  Hang
 //
-//  Shows each group member's free and busy blocks for a single day.
+//  Shows each group member's free and busy blocks for a single day, plus your
+//  own personal calendar as a read-only member column.
 //
 //  Layout: time runs down the page on the leading edge, and every member gets
 //  their own column with their avatar on top. The view lays out at its full
@@ -12,14 +13,30 @@
 
 import SwiftUI
 
+private struct PersonalBusyItem: Identifiable {
+    let id: String
+    let title: String
+    let start: Date
+    let end: Date
+}
+
 struct DayAvailabilityView: View {
     var colors = Colors()
     let date: Date
     let members: [Person]
     let calendar: Calendar
+    var groupEvents: [GroupEvents] = []
+    var personalEvents: [GroupEvents] = []
+    var importedEvents: [PersonalCalendarEvent] = []
+
+    /// Called when a group event block is tapped. Personal events stay read
+    /// only in the shared calendar.
+    var onEditGroupEvent: ((GroupEvents) -> Void)? = nil
 
     /// Committed pinch-to-zoom level for the hour rows.
     @State private var zoom: CGFloat = 1
+
+    @State private var isShowingLegend = false
 
     /// Live pinch delta. `@GestureState` resets it to 1 when the gesture ends.
     @GestureState private var pinch: CGFloat = 1
@@ -39,6 +56,47 @@ struct DayAvailabilityView: View {
     /// Every whole hour in the availability window, e.g. 8 through 21.
     private var hours: [Int] {
         Array(AvailabilityDay.startHour..<AvailabilityDay.endHour)
+    }
+
+    /// Events from the group calendar that fall on this day, in time order.
+    private var dayGroupEvents: [GroupEvents] {
+        groupEvents
+            .filter { calendar.isDate(eventStart($0), inSameDayAs: date) }
+            .sorted { $0.time < $1.time }
+    }
+
+    /// Day events that overlap the visible availability window.
+    private var timedGroupEvents: [GroupEvents] {
+        dayGroupEvents.filter { event in
+            eventStart(event) < window.end && eventEnd(event) > window.start
+        }
+    }
+
+    /// Your personal events (created in Me plus imported device-calendar
+    /// events). They appear read only in your own column.
+    private var personalBusyItems: [PersonalBusyItem] {
+        let created = personalEvents.map { event in
+            PersonalBusyItem(
+                id: event.id.uuidString,
+                title: event.name,
+                start: event.startDate,
+                end: event.endDate
+            )
+        }
+        let imported = importedEvents.map { event in
+            PersonalBusyItem(
+                id: event.id,
+                title: event.title,
+                start: event.startDate,
+                end: event.endDate
+            )
+        }
+
+        return (created + imported).sorted { $0.start < $1.start }
+    }
+
+    private var timedPersonalItems: [PersonalBusyItem] {
+        personalBusyItems.filter { $0.start < window.end && $0.end > window.start }
     }
 
     // MARK: - Zoom
@@ -111,6 +169,42 @@ struct DayAvailabilityView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
+
+            Button {
+                isShowingLegend = true
+            } label: {
+                Image(systemName: "info.circle")
+                    .font(.subheadline)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("Availability legend")
+            .popover(isPresented: $isShowingLegend) {
+                CalendarLegendView(
+                    title: "Availability Legend",
+                    entries: [
+                        CalendarLegendEntry(
+                            title: "Free",
+                            fill: colors.green.opacity(0.2)
+                        ),
+                        CalendarLegendEntry(
+                            title: "Member busy",
+                            fill: .secondary.opacity(0.45)
+                        ),
+                        CalendarLegendEntry(
+                            title: "Your calendar",
+                            fill: colors.dgreen.opacity(0.75)
+                        ),
+                        CalendarLegendEntry(
+                            title: "Group event",
+                            fill: .orange.opacity(0.15),
+                            stroke: .orange,
+                            dashed: true
+                        ),
+                    ]
+                )
+                .presentationCompactAdaptation(.popover)
+            }
         }
     }
 
@@ -189,7 +283,7 @@ struct DayAvailabilityView: View {
         .accessibilityHidden(true)
     }
 
-    /// Member columns with hour gridlines drawn over the top.
+    /// Member columns with group event bands and hour gridlines over the top.
     private func grid(columnWidth: CGFloat, contentWidth: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             HStack(spacing: 0) {
@@ -198,20 +292,30 @@ struct DayAvailabilityView: View {
                 }
             }
 
+            groupEventBands(contentWidth: contentWidth)
             hourLines(contentWidth: contentWidth)
         }
         .frame(width: contentWidth, height: gridHeight, alignment: .topLeading)
     }
 
+    @ViewBuilder
     private func memberColumn(_ member: Person, columnWidth: CGFloat) -> some View {
+        let isCurrentUser = member.id == Person.currentUser.id
         let busy = calculator.busyIntervals(for: member, on: date)
 
-        return ZStack(alignment: .topLeading) {
+        ZStack(alignment: .topLeading) {
             // The whole window is free until a busy block says otherwise.
             colors.green.opacity(0.12)
 
-            ForEach(Array(busy.enumerated()), id: \.offset) { _, interval in
-                busyBlock(interval, tint: member.tint, columnWidth: columnWidth)
+            if isCurrentUser {
+                // Your personal calendar is synced here read only.
+                ForEach(timedPersonalItems) { item in
+                    personalBlock(item, columnWidth: columnWidth)
+                }
+            } else {
+                ForEach(Array(busy.enumerated()), id: \.offset) { _, interval in
+                    busyBlock(interval, tint: member.tint, columnWidth: columnWidth)
+                }
             }
         }
         .frame(width: columnWidth, height: gridHeight)
@@ -247,6 +351,119 @@ struct DayAvailabilityView: View {
             )
     }
 
+    /// Your personal events are shown in your own column, read only.
+    private func personalBlock(
+        _ item: PersonalBusyItem,
+        columnWidth: CGFloat
+    ) -> some View {
+        let visibleStart = max(item.start, window.start)
+        let visibleEnd = min(item.end, window.end)
+        let startHours = visibleStart.timeIntervalSince(window.start) / 3600
+        let durationHours = visibleEnd.timeIntervalSince(visibleStart) / 3600
+
+        let barWidth = max(columnWidth - 10, 6)
+        let barHeight = max(4, CGFloat(durationHours) * hourHeight - 1)
+        let cornerRadius = min(8, barWidth / 3)
+
+        return RoundedRectangle(cornerRadius: cornerRadius)
+            .fill(colors.dgreen.opacity(0.75))
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(colors.dgreen, lineWidth: 1)
+            }
+            .overlay(alignment: .topLeading) {
+                if barHeight > 20 {
+                    Text(item.title)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .padding(.horizontal, 3)
+                        .padding(.top, 2)
+                }
+            }
+            .frame(width: barWidth, height: barHeight)
+            .offset(
+                x: (columnWidth - barWidth) / 2,
+                y: CGFloat(startHours) * hourHeight
+            )
+            .allowsHitTesting(false)
+    }
+
+    /// One orange band per group event, spanning every member column.
+    private func groupEventBands(contentWidth: CGFloat) -> some View {
+        ForEach(timedGroupEvents) { event in
+            groupEventBand(
+                start: eventStart(event),
+                end: eventEnd(event),
+                title: event.name,
+                contentWidth: contentWidth,
+                onTap: {
+                    onEditGroupEvent?(event)
+                }
+            )
+        }
+    }
+
+    private func groupEventBand(
+        start: Date,
+        end: Date,
+        title: String,
+        contentWidth: CGFloat,
+        onTap: (() -> Void)? = nil
+    ) -> some View {
+        let visibleStart = max(start, window.start)
+        let visibleEnd = min(end, window.end)
+        let startHours = visibleStart.timeIntervalSince(window.start) / 3600
+        let durationHours = visibleEnd.timeIntervalSince(visibleStart) / 3600
+        let bandHeight = max(18, CGFloat(durationHours) * hourHeight - 1)
+
+        let band = RoundedRectangle(cornerRadius: 6)
+            .fill(Color.orange.opacity(0.15))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(
+                        Color.orange,
+                        style: StrokeStyle(lineWidth: 1.5, dash: [4, 2])
+                    )
+            }
+            .overlay(alignment: .topLeading) {
+                Text(title)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+            }
+            .frame(width: max(contentWidth - 4, 10), height: bandHeight)
+
+        return Group {
+            if let onTap {
+                Button(action: onTap) {
+                    band
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(title)
+                .accessibilityHint("Edit or delete this event")
+            } else {
+                band
+                    .allowsHitTesting(false)
+            }
+        }
+        .offset(x: 2, y: CGFloat(startHours) * hourHeight)
+    }
+
+    private func eventStart(_ event: GroupEvents) -> Date {
+        Date(timeIntervalSince1970: event.time)
+    }
+
+    private func eventEnd(_ event: GroupEvents) -> Date {
+        if let endTime = event.endTime {
+            return Date(timeIntervalSince1970: endTime)
+        }
+        // Older events only store a start time, so show them for an hour.
+        return eventStart(event).addingTimeInterval(60 * 60)
+    }
+
     /// Faint line at each hour boundary, including one at the bottom edge.
     private func hourLines(contentWidth: CGFloat) -> some View {
         Canvas { context, size in
@@ -268,11 +485,35 @@ struct DayAvailabilityView: View {
 }
 
 #Preview {
-    ScrollView {
+    let calendar = Calendar.current
+    let today = Date()
+    let day = calendar.startOfDay(for: today)
+
+    return ScrollView {
         DayAvailabilityView(
-            date: Date(),
-            members: TestGroup(code: "ABCD67", name: "CODZEE").members,
-            calendar: .current
+            date: today,
+            members: [Person.currentUser]
+                + TestGroup(code: "ABCD67", name: "CODZEE").members,
+            calendar: calendar,
+            groupEvents: [
+                GroupEvents(
+                    name: "Dinner",
+                    desc: "Group dinner",
+                    time: (calendar.date(byAdding: .hour, value: 18, to: day) ?? today)
+                        .timeIntervalSince1970,
+                    endTime: (calendar.date(byAdding: .hour, value: 20, to: day) ?? today)
+                        .timeIntervalSince1970
+                )
+            ],
+            personalEvents: [
+                GroupEvents(
+                    name: "Gym",
+                    time: (calendar.date(byAdding: .hour, value: 9, to: day) ?? today)
+                        .timeIntervalSince1970,
+                    endTime: (calendar.date(byAdding: .hour, value: 10, to: day) ?? today)
+                        .timeIntervalSince1970
+                )
+            ]
         )
         .padding()
     }
