@@ -96,6 +96,7 @@ struct GroupCard: View {
             RoundedRectangle(cornerRadius: 10)
                 .fill(colors.green)
                 .aspectRatio(1, contentMode: .fit)
+                .glassEffect(.regular, in: .rect(cornerRadius: 20))
             VStack(alignment: .leading) {
                 Text(tg.name)
                     .font(.system(size: sizing.x5, weight: .bold))
