@@ -92,10 +92,13 @@ struct GroupView: View {
             TestGroup(
                 code: "HELLO1",
                 name: "CODZEE",
+                members: [
+                    Person(name: "seren", status: "i am skibidi")
+                ],
                 events: [
                     GroupEvents(name: "event1", time: 1_720_708_600),
                     GroupEvents(name: "event2", time: 1_790_403_500),
-                ]
+                ],
             )
         )
     )
@@ -484,32 +487,59 @@ struct EventView: View {
                     } label: {
                         VStack(alignment: .leading) {
                             Text(event.name)
+                                .font(.title3)
                                 .fontWeight(.bold)
+
                             HStack {
                                 Text(
                                     Date(timeIntervalSince1970: event.time)
                                         .formatted(
-                                            date: .numeric,
-                                            time: .shortened
+                                            date: .abbreviated,
+                                            time: .omitted
                                         )
                                 )
-                            }
-                            Text(event.desc)
-                                .lineLimit(1)
-                            if !event.location.isEmpty {
-                                Label(
-                                    event.location,
-                                    systemImage: "mappin.and.ellipse"
+                                Divider()
+                                Text(
+                                    event.endTime == nil
+                                        ? Date(
+                                            timeIntervalSince1970: event.time
+                                        )
+                                        .formatted(
+                                            date: .omitted,
+                                            time: .shortened
+                                        )
+                                        : Date(
+                                            timeIntervalSince1970: event.time
+                                        )
+                                        .formatted(
+                                            date: .omitted,
+                                            time: .shortened
+                                        ) + "-"
+                                            + Date(
+                                                timeIntervalSince1970: event
+                                                    .endTime
+                                                    ?? 0
+                                            )
+                                            .formatted(
+                                                date: .omitted,
+                                                time: .shortened
+                                            )
                                 )
-                                .lineLimit(1)
+                                Divider()
+                                Text(event.location.isEmpty ? "No location" : event.location)
                             }
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                            Text(event.desc)
+                                .lineLimit(5)
+                                .padding(.top, 4)
                         }
                         .foregroundStyle(Color.primary)
                     }
                     .listRowBackground(Color(.systemGray6))
                 }
             }
-
             .padding(.top, -sizing.x4)
             .scrollContentBackground(.hidden)
             .sheet(item: $activeSheet) { sheet in
@@ -547,70 +577,53 @@ struct MoreInfoView: View {
     @State private var isConfirmingLeave = false
 
     var body: some View {
-        ScrollView {
-            VStack {
-                Text("Invite Code")
-                    .fontWeight(.medium)
-                    .padding(.bottom, -sizing.x1)
-                ZStack {
-                    Text(tg.code)
-                        .font(.title2.bold())
-                        .padding(.horizontal, 8)
-                        .frame(height: 40)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(8)
-                }
-                .fixedSize(horizontal: true, vertical: false)
-                .padding(sizing.x1)
-                Divider()
-                    .frame(height: 0.8)
-                    .overlay(.black)
-                    .padding(.vertical, sizing.x2)
-                VStack(alignment: .leading) {
-                    Text("Description")
-                    Text(tg.desc)
-                    Divider()
-                        .frame(height: 0.8)
-                        .overlay(.black)
-                        .padding(.vertical, sizing.x2)
-                    Text("Members (\(tg.members.count))")
-                        .font(.system(size: sizing.x6, weight: .bold))
-                    ForEach(tg.members) { member in
-                        HStack {
-                            Image(systemName: "person.crop.circle")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: sizing.x10)
-                                .fontWeight(.light)
-                            VStack(alignment: .leading) {
-                                Text(member.name)
-                                    .font(.system(size: sizing.x5))
-                                Text(member.status)
-                                    .font(.system(size: sizing.x4))
-                                    .lineLimit(1)
-                            }
+        List {
+            Section("Invite code") {
+                Text(tg.code)
+                    .font(.title2.bold())
+            }
+            .listRowBackground(Color(.systemGray6))
+
+            Section("Description") {
+                Text(tg.desc)
+                Button("Edit", systemImage: "pencil") {}
+            }
+            .listRowBackground(Color(.systemGray6))
+
+            Section("Members (\(tg.members.count))") {
+                ForEach(tg.members) { member in
+                    HStack(spacing: 16) {
+                        Image(systemName: "person.crop.circle")  // TODO: pfp
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: sizing.x8)
+                            .foregroundStyle(.green)
+                        VStack(alignment: .leading) {
+                            Text(member.name)
+                                .lineLimit(1)
+                                .bold()
+                            Text(member.status)
+                                .lineLimit(1)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
-
-                Button(role: .destructive) {
-                    isConfirmingLeave = true
-                } label: {
-                    Text("Leave Group")
-                        .font(.system(size: sizing.x5, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, sizing.x2)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
-                .padding(.top, sizing.x3)
             }
+            .listRowBackground(Color(.systemGray6))
+
+            Button(role: .destructive) {
+                isConfirmingLeave = true
+            } label: {
+                Text("Leave Group")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
         }
-        .padding(.horizontal, sizing.x4)
-        .confirmationDialog(
+        .scrollContentBackground(.hidden)
+        .alert(
             "Leave this group?",
             isPresented: $isConfirmingLeave,
-            titleVisibility: .visible
         ) {
             Button("Leave Group", role: .destructive) {
                 leaveGroup()
