@@ -1,38 +1,63 @@
 import SwiftUI
-import FirebaseSignInWithApple
 
 struct AuthView: View {
-    @State private var showingAlert = false
-    @Environment(\.firebaseSignInWithApple) private var firebaseSignInWithApple
+    @State private var appleSignIn = AppleSignInController()
 
     var body: some View {
-        VStack {
-            Button {
-                showingAlert = true
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "apple.logo")
+        ZStack {
+            Color(.secondarySystemBackground)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 32) {
+                VStack(spacing: 8) {
+                    Text("Welcome to \(Text("Hang!").foregroundStyle(.accent).fontWeight(.black).fontDesign(.rounded))")
                         .font(.title3)
-                    Text("Sign in with Apple")
-                        .font(.headline)
+                        .fontWeight(.bold)
+                    Text("Sign in to join your friends, share your personal calendar and plan events.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-                .foregroundStyle(Color(uiColor: .systemBackground))
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(Color.primary)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                
+                Button {
+                    appleSignIn.signIn()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "apple.logo")
+                            .font(.title3)
+                        Text("Sign in with Apple")
+                            .font(.headline)
+                    }
+                    .foregroundStyle(Color(uiColor: .systemBackground))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(Color.primary)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                }
+                .disabled(appleSignIn.isAuthenticating)
+                
+                //            if appleSignIn.isAuthenticating {
+                //                ProgressView()
+                //            }
             }
-            .alert(isPresented: $showingAlert) {
-                Alert(
-                    title: Text("Are you sure?"),
-                    message: Text("We need you to sign in so we can keep track of your calendar events!"),
-                    primaryButton: .default(Text("Confirm")) {
-                        firebaseSignInWithApple.authenticate()
-                    },
-                    secondaryButton: .cancel()
+            .padding(32)
+            .background(Color(.systemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .shadow(color: .gray.opacity(0.25), radius: 16)
+            .padding(16)
+            .alert(
+                "Couldn't sign in",
+                isPresented: Binding(
+                    get: { appleSignIn.errorMessage != nil },
+                    set: { if !$0 { appleSignIn.errorMessage = nil } }
                 )
+            ) {
+                Button("OK", role: .cancel) {
+                    appleSignIn.errorMessage = nil
+                }
+            } message: {
+                Text(appleSignIn.errorMessage ?? "")
             }
-            .padding()
         }
     }
 }
