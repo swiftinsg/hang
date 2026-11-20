@@ -2,9 +2,15 @@ import SwiftUI
 
 struct JoinGroupView: View {
     let codeLength = 6
+    @Environment(\.dismiss) private var dismiss
+
     @State private var code = ""
-    @State private var showAlert = false
+    @State private var isJoining = false
+    @State private var showError = false
+    @State private var errorMessage: String?
     @FocusState private var isFocused: Bool
+
+    private var store: GroupStore { GroupStore.shared }
 
     var body: some View {
         NavigationStack {
@@ -24,7 +30,7 @@ struct JoinGroupView: View {
                         .keyboardType(.numberPad)
                         .textContentType(.oneTimeCode)  // Enables iOS SMS AutoFill
                         .focused($isFocused)
-                        .accentColor(.clear)
+//                        .accentColor(.clear)
                         .foregroundColor(.clear)
                         .background(Color.clear)
                         .onChange(of: code) { _, newValue in
@@ -43,20 +49,34 @@ struct JoinGroupView: View {
             }
             .padding()
             .navigationTitle("Join Group")
-            .alert("Group not found", isPresented: $showAlert) {
+            .alert("Couldn't join group", isPresented: $showError) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("Please double-check the entered group code.")
+                Text(errorMessage ?? "")
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Confirm", systemImage: "checkmark") {
-                        // TODO: look the code up in Firestore instead of hard-coding it.
-                        if code != "CODZEE" {
-                            showAlert = true
-                        }
+                        joinGroup()
                     }
+                    .disabled(code.count != codeLength || isJoining)
                 }
+            }
+        }
+    }
+
+    private func joinGroup() {
+        isJoining = true
+        Task {
+            do {
+                try await store.joinGroup(
+                    inviteCode: code.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+                dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+                isJoining = false
             }
         }
     }

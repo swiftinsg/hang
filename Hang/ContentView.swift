@@ -14,10 +14,13 @@ struct ContentView: View {
                 MeView()
             }
         }
+        .tint(Color.accentColor)
         .onAppear {
             saveManager.loadProfile()
             // Keep the personal calendar in sync with the signed-in account.
             PersonalEventsStore.shared.startListening()
+            // Keep the list of groups the user belongs to in sync.
+            GroupStore.shared.startListening()
         }
         .onChange(of: saveManager.hasLoadedProfile) { _, loaded in
             guard loaded else { return }

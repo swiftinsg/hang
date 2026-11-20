@@ -28,17 +28,33 @@ struct Sizing: DynamicProperty {
 }
 
 public struct TestGroup: Hashable, Identifiable {
-    public let id = UUID()
+    public let id: UUID
     public let code: String
     var name: String
-    var desc: String = "Add description here..."
-    var members: [Person] = [
-        Person(name: "Tiffany", status: "hello"),
-        Person(name: "Serene", status: "hi"),
-        Person(name: "Iain", status: "hey"),
-        Person(name: "Zixi", status: "wassup"),
-    ]
-    var events: [GroupEvents] = []
+    var desc: String
+    var members: [Person]
+    var events: [GroupEvents]
+    /// Firestore document ID (`groups/<documentID>`). Empty for locally
+    /// created groups that haven't been saved to Firestore yet.
+    let documentID: String
+
+    public init(
+        id: UUID = UUID(),
+        code: String,
+        name: String,
+        desc: String = "Add description here...",
+        members: [Person] = [],
+        events: [GroupEvents] = [],
+        documentID: String = ""
+    ) {
+        self.id = id
+        self.code = code
+        self.name = name
+        self.desc = desc
+        self.members = members
+        self.events = events
+        self.documentID = documentID
+    }
 }
 
 public struct GroupEvents: Hashable, Identifiable {

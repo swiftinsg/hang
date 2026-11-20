@@ -2,14 +2,25 @@ import SwiftUI
 
 struct CreateGroupView: View {
     @Environment(\.dismiss) private var dismiss
+
     @State private var groupName = ""
+    @State private var groupDesc = ""
     @State private var code = ""
-    @Binding var tgs: [TestGroup]
+    @State private var isSaving = false
+    @State private var showError = false
+    @State private var errorMessage: String?
+
+    private var store: GroupStore { GroupStore.shared }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 32) {
                 TextField("Group name", text: $groupName)
+                    .padding()
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(.capsule)
+
+                TextField("Description", text: $groupDesc, axis: .vertical)
                     .padding()
                     .background(Color(.secondarySystemBackground))
                     .clipShape(.capsule)
@@ -33,15 +44,48 @@ struct CreateGroupView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Confirm", systemImage: "checkmark") {
-                        tgs.append(TestGroup(code: code, name: groupName))
-                        dismiss()
+                        createGroup()
                     }
+                    .disabled(!canSave || isSaving)
                 }
             }
+            .alert("Couldn't create group", isPresented: $showError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
+            }
         }
-        .onAppear {
-            // TODO: keep generating until the code is not already in Firestore.
-            code = generateRandomCode()
+        .task {
+            do {
+                code = try await store.makeUniqueInviteCode()
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
+        }
+    }
+
+    private var canSave: Bool {
+        !groupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && code.count == 6
+            && !isSaving
+    }
+
+    private func createGroup() {
+        isSaving = true
+        Task {
+            do {
+                try await store.createGroup(
+                    name: groupName.trimmingCharacters(in: .whitespacesAndNewlines),
+                    desc: groupDesc.trimmingCharacters(in: .whitespacesAndNewlines),
+                    inviteCode: code
+                )
+                dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+                isSaving = false
+            }
         }
     }
 
@@ -61,15 +105,8 @@ struct CreateGroupView: View {
         let stringIndex = code.index(code.startIndex, offsetBy: index)
         return String(code[stringIndex])
     }
-
-    private func generateRandomCode(length: Int = 6) -> String {
-        let characters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        return String(
-            (0..<length).compactMap { _ in characters.randomElement() }
-        )
-    }
 }
 
 #Preview {
-    CreateGroupView(tgs: .constant([]))
+    CreateGroupView()
 }

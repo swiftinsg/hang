@@ -54,7 +54,7 @@ struct WeView: View {
                 }
             }
             .sheet(isPresented: $showingCreateSheet) {
-                CreateGroupView(tgs: $store.groups)
+                CreateGroupView()
                     .presentationDetents([.medium])
             }
             .sheet(isPresented: $showingJoinSheet) {

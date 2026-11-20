@@ -62,21 +62,21 @@ struct CreateEventView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
-                        tg.events.append(
-                            GroupEvents(
-                                name: eventName.trimmingCharacters(
-                                    in: .whitespacesAndNewlines
-                                ),
-                                desc: eventDesc.trimmingCharacters(
-                                    in: .whitespacesAndNewlines
-                                ),
-                                time: startDate.timeIntervalSince1970,
-                                endTime: endDate.timeIntervalSince1970
-                            )
+                        let event = GroupEvents(
+                            name: eventName.trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            ),
+                            desc: eventDesc.trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            ),
+                            time: startDate.timeIntervalSince1970,
+                            endTime: endDate.timeIntervalSince1970
                         )
+                        tg.events.append(event)
+                        GroupStore.shared.addEvent(event, to: tg)
                         dismiss()
                     }
-                    .tint(colors.dgreen)
+//                    .tint(.red)
                     .disabled(!canSave)
                 }
             }

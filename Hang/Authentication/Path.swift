@@ -15,5 +15,12 @@ struct Path {
         // Subcollection under each user document that holds their personal
         // calendar events: users/<uid>/calendar/<entryID>
         static let Calendar = "calendar"
+
+        // One collection that holds one document per group.
+        static let Groups = "groups"
+
+        // Subcollection under each group document for shared events:
+        // groups/<groupID>/events/<eventID>
+        static let Events = "events"
     }
 }

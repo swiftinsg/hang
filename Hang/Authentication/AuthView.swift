@@ -7,18 +7,33 @@ struct AuthView: View {
         ZStack {
             Color(.secondarySystemBackground)
                 .ignoresSafeArea()
-            
+
             VStack(spacing: 32) {
-                VStack(spacing: 8) {
-                    Text("Welcome to \(Text("Hang!").foregroundStyle(.accent).fontWeight(.black).fontDesign(.rounded))")
-                        .font(.title3)
-                        .fontWeight(.bold)
-                    Text("Sign in to join your friends, share your personal calendar and plan events.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                VStack(spacing: 16) {
+                    VStack {
+                        //                    Text(
+                        //                        "Welcome to \(Text("Hang!").foregroundStyle(.accent).fontWeight(.black).fontDesign(.rounded))"
+                        //                    )
+                        //                    .font(.title3)
+                        //                    .fontWeight(.bold)
+                        Text("Welcome to")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                        Text("Hang!").foregroundStyle(.accent).fontWeight(
+                            .black
+                        )
+                        .font(.largeTitle)
+                        .fontDesign(.rounded)
+                    }
+
+                    Text(
+                        "Sign in to join your friends, share your personal calendar and plan events."
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
                 }
-                
+
                 Button {
                     appleSignIn.signIn()
                 } label: {
@@ -35,16 +50,17 @@ struct AuthView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
                 .disabled(appleSignIn.isAuthenticating)
-                
+
                 //            if appleSignIn.isAuthenticating {
                 //                ProgressView()
                 //            }
             }
-            .padding(32)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 48)
             .background(Color(.systemBackground))
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .shadow(color: .gray.opacity(0.25), radius: 16)
-            .padding(16)
+            .padding(24)
             .alert(
                 "Couldn't sign in",
                 isPresented: Binding(
