@@ -35,6 +35,17 @@ class SaveManager: ObservableObject {
         }
     }
     
+    /// Saves the signed-in user's choice of reminder for all their events.
+    /// merge: true keeps the other profile fields (username, userId, ...).
+    func saveReminderPreference(_ preference: ReminderPreference) {
+        guard let profileDocument else { return }
+        profileDocument.setData(
+            ["reminderPreference": preference.rawValue],
+            merge: true
+        )
+        profile?.reminderPreference = preference
+    }
+
     func saveEvents(_ username: String) {
         guard let profileDocument else { return }
         do {

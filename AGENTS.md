@@ -6,6 +6,7 @@ Firestore
 │   └── Apple generated UID (document)
 │       ├── userId: String  // TODO: REMOVE??
 │       ├── username: String
+│       ├── reminderPreference: String  // "none" | "1day" | "2hours"; per-user global reminder for ALL events
 │       ├── groupsIn: [DocumentReference]
 │       └── calendar (subcollection)
 │           └── entryID (document)

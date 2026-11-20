@@ -23,6 +23,45 @@ struct ContentView: View {
         return Auth.auth().currentUser?.uid
     }
 
+    /// Every event the user can see in Hang, normalised for reminder scheduling.
+    private var reminderEvents: [ReminderEvent] {
+        var result: [ReminderEvent] = []
+
+        for event in personalStore.events {
+            result.append(ReminderEvent(
+                id: event.id.uuidString,
+                source: .personal,
+                title: event.name,
+                startDate: event.startDate,
+                location: event.location
+            ))
+        }
+
+        for group in GroupStore.shared.groups where !group.documentID.isEmpty {
+            for event in group.events {
+                result.append(ReminderEvent(
+                    id: "\(group.documentID)-\(event.id.uuidString)",
+                    source: .group,
+                    title: event.name,
+                    startDate: event.startDate,
+                    location: event.location
+                ))
+            }
+        }
+
+        for event in calendarStore.events {
+            result.append(ReminderEvent(
+                id: event.id,
+                source: .device,
+                title: event.title,
+                startDate: event.startDate,
+                location: ""
+            ))
+        }
+
+        return result
+    }
+
     init() {
         // Previews build ContentView directly and never run HangApp's init,
         // so apply the UIKit (navigation/tab bar) rounded fonts here too.
@@ -59,6 +98,15 @@ struct ContentView: View {
         .onChange(of: personalStore.events) { _, _ in
             Task { await publishAvailability(to: groupIDs, force: true) }
         }
+        // Rebuild local reminders whenever events, the preference or
+        // notification permission change. Kept in a modifier to keep this
+        // view's body type-checkable.
+        .modifier(ReminderSyncModifier(
+            events: reminderEvents,
+            preference: saveManager.profile?.reminderPreference ?? .none,
+            scenePhase: scenePhase,
+            onSync: { Task { await syncReminders() } }
+        ))
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             calendarStore.loadEventsIfAuthorized()
@@ -66,6 +114,7 @@ struct ContentView: View {
         }
         .onDisappear {
             availabilityStore.stopAll()
+            Task { await ReminderScheduler.shared.cancelAll() }
         }
         .onChange(of: saveManager.hasLoadedProfile) { _, loaded in
             guard loaded else { return }
@@ -95,6 +144,19 @@ struct ContentView: View {
         }
     }
 
+    /// Schedules the user's chosen reminder for all their events on this device.
+    private func syncReminders() async {
+        guard currentUID != nil else {
+            await ReminderScheduler.shared.cancelAll()
+            return
+        }
+
+        await ReminderScheduler.shared.sync(
+            events: reminderEvents,
+            preference: saveManager.profile?.reminderPreference ?? .none
+        )
+    }
+
     /// Publishes anonymous busy intervals to every group this account belongs
     /// to. Event titles never enter this path.
     private func publishAvailability(to ids: [String], force: Bool = false) async {
@@ -104,6 +166,31 @@ struct ContentView: View {
             uid: uid,
             force: force
         )
+    }
+}
+
+/// Watches everything that can invalidate scheduled reminders and asks the
+/// parent to rebuild them. Sync replaces all Hang requests, so event edits and
+/// deletions can't leave stale notifications behind.
+private struct ReminderSyncModifier: ViewModifier {
+    let events: [ReminderEvent]
+    let preference: ReminderPreference
+    let scenePhase: ScenePhase
+    let onSync: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: events, initial: true) { _, _ in onSync() }
+            .onChange(of: preference) { _, _ in onSync() }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: .hangRemindersShouldResync
+                )
+            ) { _ in onSync() }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                onSync()
+            }
     }
 }
 
