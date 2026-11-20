@@ -7,14 +7,24 @@
 
 import SwiftUI
 
+public enum LoadScreen {
+    case login
+    case loadGroup
+}
+
 struct AnimationView: View {
+    var screenType: LoadScreen
     @State var screenSize: CGSize = .zero
     var body: some View {
         ZStack {
             Color(red: 0.9, green: 1, blue: 0.95, opacity: 1)
                 .ignoresSafeArea()
-            LogAnim(size: screenSize, time: 1.5, time2: 0.3)
-            //GroupAnim(size: screenSize, time: 0.075, time2: 0.3)
+            switch(screenType) {
+            case .login:
+                LogAnim(size: screenSize, time: 1.5, time2: 0.3)
+            case .loadGroup:
+                GroupAnim(size: screenSize, time: 0.075, time2: 0.3)
+            }
         }
         .onGeometryChange(for: CGSize.self) { proxy in
             proxy.size
@@ -25,7 +35,7 @@ struct AnimationView: View {
 }
 
 #Preview {
-    AnimationView()
+    AnimationView(screenType: .login)
 }
 
 struct LogAnim: View {
@@ -63,6 +73,7 @@ struct LogAnim: View {
                 Text("Logging in...")
                     .hidden()
                 Text(text)
+                    .foregroundStyle(Color.black)
             }
             .fontDesign(.rounded)
             .font(.system(size: size.width*0.06, weight: .medium))

@@ -7,14 +7,19 @@
 
 import SwiftUI
 
+
+
 struct temp: View {
     var sizing = Sizing()
     var colors = Colors()
-
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 10)
-                .fill(colors.green)
+                .fill(Color(
+                    red: Double.random(in: 0.35...0.45),
+                    green: Double.random(in: 0.6...0.7),
+                    blue: Double.random(in: 0.4...0.5)
+                ))
                 .aspectRatio(1, contentMode: .fit)
             VStack(alignment: .leading, spacing: 16) {
                 Text("are you free on 23 november 2026 for a thing")
@@ -23,7 +28,7 @@ struct temp: View {
                     .lineLimit(2)
                     //                    .foregroundStyle(colors.txt1)
                     .padding(.bottom, -sizing.x1)
-                //                Text("That's not great.")
+//                                Text("That's not great.")
                 //                    .font(.system(size: sizing.x3))
                 //                    .lineLimit(1)
                 //                    .foregroundStyle(colors.txt2)

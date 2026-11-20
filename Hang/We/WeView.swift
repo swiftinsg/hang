@@ -8,7 +8,7 @@ struct WeView: View {
     @State private var store = GroupStore.shared
     @State var showingCreateSheet = false
     @State var showingJoinSheet = false
-
+    
     var results: [TestGroup] {
         var filtered = store.groups
         if !searchQuery.isEmpty {
@@ -21,15 +21,15 @@ struct WeView: View {
         }
         return filtered
     }
-
+    
     let columns = [
         GridItem(.adaptive(minimum: 150))
     ]
     @FocusState var isFocused: Bool
-
+    
     var body: some View {
         @Bindable var store = store
-
+        
         NavigationStack {
             ScrollView {
                 VStack {
@@ -90,36 +90,38 @@ struct GroupCard: View {
     var sizing = Sizing()
     var colors = Colors()
     let tg: TestGroup
-
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 10)
-                .fill(colors.green)
+                .fill(Color(
+                    red: Double.random(in: 0.35...0.45),
+                    green: Double.random(in: 0.6...0.7),
+                    blue: Double.random(in: 0.4...0.5)
+                ))
                 .aspectRatio(1, contentMode: .fit)
-                .glassEffect(.regular, in: .rect(cornerRadius: 20))
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 16) {
                 Text(tg.name)
-                    .font(.system(size: sizing.x5, weight: .bold))
-                    .lineLimit(1)
-                    .foregroundStyle(colors.txt1)
+                    .font(.title3)
+                    .bold()
+                    .lineLimit(2)
                     .padding(.bottom, -sizing.x1)
-                Divider()
-                    .frame(height: 1)
-                    .overlay(colors.obj)
-                    .padding(.vertical, sizing.x2)
-                Text(tg.desc)
-                    .font(.system(size: sizing.x3))
-                    .lineLimit(1)
-                    .foregroundStyle(colors.txt2)
-                HStack {
-                    Text("\(tg.members.count)")
-                        .font(.system(size: sizing.x4, weight: .bold))
-                        .foregroundStyle(colors.txt2)
+                HStack(spacing: 4) {
                     Image(systemName: "person.2.fill")
-                        .resizable()
-                        .scaledToFit()
-                        .foregroundStyle(colors.txt2)
-                        .frame(width: sizing.x4)
+                        .font(.subheadline)
+                    Text(String(tg.members.count))
+                        .font(.headline)
+                        .fontWeight(.medium)
+                }
+                HStack(spacing: -8) {
+                    ForEach(Array(tg.members.prefix(5))) { member in
+                        Circle()
+                            .foregroundStyle(Color(
+                                red: Double.random(in: 0.1...0.8),
+                                green: Double.random(in: 0.1...0.8),
+                                blue: Double.random(in: 0.1...0.8)
+                            ))
+                            .frame(width: 32)
+                    }
                 }
             }
             .padding(.vertical, sizing.x3)

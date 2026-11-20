@@ -47,7 +47,8 @@ extension Person {
         let palette: [Color] = [
             .teal, .indigo, .orange, .pink, .purple, .blue, .mint,
         ]
-        let colorSeed = name.unicodeScalars.reduce(0) { $0 + Int($1.value) }
+        let seedSource = uid.isEmpty ? name : uid
+        let colorSeed = seedSource.unicodeScalars.reduce(0) { $0 + Int($1.value) }
         return palette[colorSeed % palette.count]
     }
 }

@@ -21,6 +21,41 @@ struct GroupData: Codable {
     var desc: String
     /// References to the members' `users/<uid>` documents.
     var people: [DocumentReference]
+    /// uid → username, copied into the group when someone joins. Personal
+    /// calendars stay private; only the display name is shared with the group.
+    var memberNames: [String: String] = [:]
+
+    init(
+        inviteCode: String,
+        name: String,
+        desc: String,
+        people: [DocumentReference],
+        memberNames: [String: String] = [:]
+    ) {
+        self.inviteCode = inviteCode
+        self.name = name
+        self.desc = desc
+        self.people = people
+        self.memberNames = memberNames
+    }
+
+    /// Older groups were saved without `memberNames`. Decode that as empty so
+    /// they still load; names are backfilled when each member next opens the
+    /// app.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        inviteCode = try container.decode(String.self, forKey: .inviteCode)
+        name = try container.decode(String.self, forKey: .name)
+        desc = try container.decode(String.self, forKey: .desc)
+        people = try container.decode([DocumentReference].self, forKey: .people)
+        memberNames =
+            try container.decodeIfPresent([String: String].self, forKey: .memberNames)
+            ?? [:]
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, inviteCode, name, desc, people, memberNames
+    }
 
     /// Rebuilds the in-app group. The Firestore document ID becomes the group's
     /// UUID so it keeps the same identity every time it loads, and is also kept
@@ -39,12 +74,13 @@ struct GroupData: Codable {
                   reference.path != currentUserDocument.path else {
                 return nil
             }
-            // Names are not resolved yet, but the document ID is the member's
-            // Firebase uid, so identity and published availability stay stable.
+            let uid = reference.documentID
+            let resolvedName = memberNames[uid]?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return Person(
-                uid: reference.documentID,
-                name: "Member",
-                status: "Member"
+                uid: uid,
+                name: resolvedName.isEmpty ? "Member" : resolvedName,
+                status: "Group member"
             )
         }
 

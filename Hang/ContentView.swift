@@ -75,6 +75,9 @@ struct ContentView: View {
                     in: .whitespacesAndNewlines
                 ) ?? ""
             showNamePrompt = trimmedName.isEmpty
+            if !trimmedName.isEmpty {
+                Task { await GroupStore.shared.refreshMyDisplayName() }
+            }
         }
         .alert("Enter your username", isPresented: $showNamePrompt) {
             TextField("Your name", text: $userName)
@@ -85,6 +88,7 @@ struct ContentView: View {
                 guard !trimmedName.isEmpty else { return }
                 saveManager.saveUsername(trimmedName)
                 userName = ""
+                Task { await GroupStore.shared.refreshMyDisplayName() }
             }
             .keyboardShortcut(.defaultAction)
             Button("Cancel", role: .cancel) {}

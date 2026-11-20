@@ -1,3 +1,4 @@
+import FirebaseAuth
 import SwiftUI
 
 private enum GroupCalendarSheet: Identifiable {
@@ -27,6 +28,7 @@ struct GroupView: View {
     var colors = Colors()
     @Binding var tg: TestGroup
     @State private var selectedGroupTab: GroupTab = .events
+    @State private var availabilityStore = AvailabilityStore.shared
 
     var body: some View {
         NavigationStack {
@@ -62,6 +64,23 @@ struct GroupView: View {
                 // Keep this group's shared hangouts live so new ones appear
                 // for every member without reopening the app.
                 GroupStore.shared.startListeningToEvents(for: tg)
+
+                // Opening a group is also the most reliable time to sync
+                // availability: make sure we are listening for other members
+                // and publish this member's busy times even if the app-wide
+                // group-ID change handler hasn't fired yet.
+                let groupID = tg.documentID
+                guard !groupID.isEmpty else { return }
+                availabilityStore.listen(groupID: groupID)
+                if let uid = Auth.auth().currentUser?.uid {
+                    Task {
+                        await AvailabilityPublisher.shared.refresh(
+                            groups: [groupID],
+                            uid: uid,
+                            force: true
+                        )
+                    }
+                }
             }
         }
     }
@@ -99,6 +118,7 @@ struct CalendarView: View {
     @State private var calendarStore = PersonalCalendarStore.shared
     @State private var personalStore = PersonalEventsStore.shared
     @State private var availabilityStore = AvailabilityStore.shared
+    @State private var availabilityPublisher = AvailabilityPublisher.shared
 
     private var members: [Person] { tg.members }
 
@@ -191,6 +211,16 @@ struct CalendarView: View {
             VStack(spacing: 2) {
                 monthHeader
                 monthGrid
+
+                if let message = availabilityStore.errorMessage
+                    ?? availabilityPublisher.errorMessage
+                {
+                    Text("Availability sync: \(message)")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                }
 
                 Divider()
                     .padding(.vertical, 8)

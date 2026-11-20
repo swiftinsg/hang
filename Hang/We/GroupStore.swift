@@ -120,12 +120,15 @@ final class GroupStore {
         }
 
         let groupDocument = groupsCollection.document()
+        let uid = userDocument.documentID
+        let username = await currentUsername()
 
         let data = GroupData(
             inviteCode: code,
             name: name,
             desc: desc,
-            people: [userDocument]
+            people: [userDocument],
+            memberNames: username.isEmpty ? [:] : [uid: username]
         )
 
         let batch = db.batch()
@@ -164,11 +167,18 @@ final class GroupStore {
             throw GroupStoreError.groupNotFound
         }
 
+        let uid = userDocument.documentID
+        let username = await currentUsername()
+
+        var groupUpdate: [String: Any] = [
+            "people": FieldValue.arrayUnion([userDocument])
+        ]
+        if !username.isEmpty {
+            groupUpdate["memberNames.\(uid)"] = username
+        }
+
         let batch = db.batch()
-        batch.updateData(
-            ["people": FieldValue.arrayUnion([userDocument])],
-            forDocument: groupDocument
-        )
+        batch.updateData(groupUpdate, forDocument: groupDocument)
         batch.updateData(
             ["groupsIn": FieldValue.arrayUnion([groupDocument])],
             forDocument: userDocument
@@ -329,6 +339,48 @@ final class GroupStore {
     }
 
     // MARK: - Helpers
+
+    /// The signed-in user's username from their own profile document. Only the
+    /// account owner can read this, which is why it is copied into each group.
+    private func currentUsername() async -> String {
+        guard let uid = Auth.auth().currentUser?.uid else { return "" }
+        let document = try? await db
+            .collection(Path.Firestore.Users)
+            .document(uid)
+            .getDocument()
+        let raw = document?.data()?["username"] as? String ?? ""
+        return raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Copies this user's current username into every group they belong to, so
+    /// other members see a real name instead of the "Member" placeholder.
+    /// Safe to call on launch and whenever the username changes.
+    func refreshMyDisplayName() async {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        let username = await currentUsername()
+        guard !username.isEmpty else { return }
+
+        var ids = Set(groups.map(\.documentID).filter { !$0.isEmpty })
+        if let userDocument = try? await db
+            .collection(Path.Firestore.Users)
+            .document(uid)
+            .getDocument(),
+            let references = userDocument.data()?["groupsIn"] as? [DocumentReference]
+        {
+            ids.formUnion(references.map(\.documentID))
+        }
+
+        guard !ids.isEmpty else { return }
+
+        let batch = db.batch()
+        for id in ids {
+            batch.updateData(
+                ["memberNames.\(uid)": username],
+                forDocument: groupsCollection.document(id)
+            )
+        }
+        try? await batch.commit()
+    }
 
     private func isInviteCodeTaken(_ code: String) async throws -> Bool {
         let snapshot = try await groupsCollection

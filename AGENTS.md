@@ -21,6 +21,7 @@ Firestore
         ├── name: String
         ├── desc: String
         ├── people: [DocumentReference]
+        ├── memberNames: { uid: username, ... }  // display names shared with the group
         ├── events (subcollection)
         │   └── eventID (document)
         │       ├── name: String

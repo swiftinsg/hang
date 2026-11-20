@@ -41,6 +41,8 @@ final class AvailabilityPublisher {
     /// Don't re-upload more often than this when responding to calendar edits.
     var minimumInterval: TimeInterval = 15 * 60
 
+    private(set) var errorMessage: String?
+
     @ObservationIgnored private var lastPublish: [String: Date] = [:]
     @ObservationIgnored private var inFlight: Set<String> = []
 
@@ -127,6 +129,9 @@ final class AvailabilityPublisher {
             ])
 
         lastPublish[groupID] = Date()
+        await MainActor.run {
+            self.errorMessage = nil
+        }
     }
 
     /// Stops sharing with one group. The document is deleted rather than
@@ -150,7 +155,13 @@ final class AvailabilityPublisher {
                Date().timeIntervalSince(last) < minimumInterval {
                 continue
             }
-            try? await publish(to: groupID, uid: uid)
+            do {
+                try await publish(to: groupID, uid: uid)
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = error.localizedDescription
+                }
+            }
         }
     }
 }

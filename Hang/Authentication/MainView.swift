@@ -16,9 +16,11 @@ struct MainView: View {
         Group{
             switch firebaseSignInWithApple.state {
             case .loading:
-                ProgressView()
+                AnimationView(screenType: .login)
+//                ProgressView()
             case .authenticating:
-                ProgressView()
+                AnimationView(screenType: .login)
+//                ProgressView()
             case .notAuthenticated:
                 AuthView()
             case .authenticated:
