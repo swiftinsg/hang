@@ -455,6 +455,13 @@ struct PersonalDayTimelineView: View {
                         .lineLimit(2)
                 }
 
+                if !event.location.isEmpty {
+                    Text(event.location)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
                 Text(timeText(for: event))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -477,6 +484,13 @@ struct PersonalDayTimelineView: View {
 
                 if !event.desc.isEmpty {
                     Text(event.desc)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                if !event.location.isEmpty {
+                    Text(event.location)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)

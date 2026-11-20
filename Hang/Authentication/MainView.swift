@@ -25,7 +25,9 @@ struct MainView: View {
                 ContentView()
             }
         }
+        .fontDesign(.rounded)
         .onChange(of: firebaseSignInWithApple.state) { oldValue, newValue in print("FirebaseSignInWithApple state changed from \(oldValue) to \(newValue)")}
+        
     }
 }
 

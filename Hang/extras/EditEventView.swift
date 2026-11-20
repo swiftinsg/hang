@@ -22,6 +22,7 @@ struct EditEventView: View {
 
     @State private var eventName: String
     @State private var eventDesc: String
+    @State private var eventLocation: String
     @State private var startDate: Date
     @State private var endDate: Date
     @State private var isConfirmingDelete = false
@@ -40,6 +41,7 @@ struct EditEventView: View {
         let event = events.wrappedValue.first(where: { $0.id == eventID })
         _eventName = State(initialValue: event?.name ?? "")
         _eventDesc = State(initialValue: event?.desc ?? "")
+        _eventLocation = State(initialValue: event?.location ?? "")
         _startDate = State(initialValue: event?.startDate ?? Date())
         _endDate = State(
             initialValue: event?.endDate
@@ -53,6 +55,7 @@ struct EditEventView: View {
                 Section("Details") {
                     TextField("Name", text: $eventName)
                     TextField("Description", text: $eventDesc, axis: .vertical)
+                    TextField("Location (optional)", text: $eventLocation)
                 }
 
                 Section("Date and Time") {
@@ -93,7 +96,7 @@ struct EditEventView: View {
                     Button("Save") {
                         saveEvent()
                     }
-                    .tint(colors.dgreen)
+//                    .tint(.red)
                     .disabled(!canSave)
                 }
             }
@@ -129,6 +132,9 @@ struct EditEventView: View {
             in: .whitespacesAndNewlines
         )
         events[index].desc = eventDesc.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        events[index].location = eventLocation.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
         events[index].time = startDate.timeIntervalSince1970

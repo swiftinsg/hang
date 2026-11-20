@@ -26,26 +26,34 @@ struct GroupData: Codable {
     /// UUID so it keeps the same identity every time it loads, and is also kept
     /// as `documentID` so the group's events subcollection can be addressed.
     ///
-    /// The current user is left out of `members` because the calendar shows them
-    /// separately as `Person.currentUser` (with their real personal calendar).
+    /// `members` includes the signed-in user as `Person.currentUser` (always
+    /// first) plus every other member, so the member list and count include the
+    /// user while the calendar shows them left-most.
     func testGroup(
         documentID: String,
         currentUserDocument: DocumentReference?,
         events: [GroupEvents] = []
     ) -> TestGroup {
-        TestGroup(
+        let otherMembers = people.compactMap { reference -> Person? in
+            guard let currentUserDocument,
+                  reference.path != currentUserDocument.path else {
+                return nil
+            }
+            // Names are not resolved yet, but the document ID is the member's
+            // Firebase uid, so identity and published availability stay stable.
+            return Person(
+                uid: reference.documentID,
+                name: "Member",
+                status: "Member"
+            )
+        }
+
+        return TestGroup(
             id: UUID(uuidString: documentID) ?? UUID(),
             code: inviteCode,
             name: name,
             desc: desc,
-            members: people.compactMap { reference in
-                guard let currentUserDocument,
-                      reference.path != currentUserDocument.path else {
-                    return nil
-                }
-                // Other members are placeholders until names can be resolved.
-                return Person(name: "Member", status: "Member")
-            },
+            members: [Person.currentUser] + otherMembers,
             events: events,
             documentID: documentID
         )
@@ -69,9 +77,25 @@ struct GroupEventData: Identifiable, Codable {
     init(event: GroupEvents) {
         self.name = event.name
         self.desc = event.desc
-        self.location = ""
+        self.location = event.location
         self.time = Timestamp(date: event.startDate)
         self.endTime = Timestamp(date: event.endDate)
+    }
+
+    /// Older event documents were written without a `location` key. Default it
+    /// to an empty string so those events still decode instead of being dropped
+    /// by the store's `compactMap`.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        desc = try container.decode(String.self, forKey: .desc)
+        location = try container.decodeIfPresent(String.self, forKey: .location) ?? ""
+        time = try container.decode(Timestamp.self, forKey: .time)
+        endTime = try container.decodeIfPresent(Timestamp.self, forKey: .endTime)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, desc, location, time, endTime
     }
 
     /// Rebuilds the in-app event. The Firestore document ID is the event's
@@ -81,6 +105,7 @@ struct GroupEventData: Identifiable, Codable {
             id: UUID(uuidString: documentID) ?? UUID(),
             name: name,
             desc: desc,
+            location: location,
             time: time.dateValue().timeIntervalSince1970,
             endTime: endTime?.dateValue().timeIntervalSince1970
         )

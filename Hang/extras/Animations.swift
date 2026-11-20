@@ -61,6 +61,8 @@ public struct GroupEvents: Hashable, Identifiable {
     public let id: UUID
     var name: String
     var desc: String = "Add description here..."
+    /// Where the hangout happens. Empty when no location is provided.
+    var location: String = ""
     var time: Double
     /// Optional end time. Events created before this was added only store a start.
     var endTime: Double? = nil
@@ -71,12 +73,14 @@ public struct GroupEvents: Hashable, Identifiable {
         id: UUID = UUID(),
         name: String,
         desc: String = "Add description here...",
+        location: String = "",
         time: Double,
         endTime: Double? = nil
     ) {
         self.id = id
         self.name = name
         self.desc = desc
+        self.location = location
         self.time = time
         self.endTime = endTime
     }
@@ -98,7 +102,11 @@ extension GroupEvents {
 }
 
 public struct Person: Hashable, Identifiable {
-    public let id = UUID()
+    /// Firebase uid. Stable across launches and devices, so it can be used as
+    /// the identity for published availability documents.
+    public var uid: String = ""
+    /// Identity follows the account, not a fresh UUID per instance.
+    public var id: String { uid }
     var name: String
     var status: String = "Add description here..."
 }

@@ -23,6 +23,8 @@ private struct PersonalBusyItem: Identifiable {
 struct DayAvailabilityView: View {
     var colors = Colors()
     let date: Date
+    /// Firestore group document ID, used to read this group's shared busy times.
+    var groupID: String = ""
     let members: [Person]
     let calendar: Calendar
     var groupEvents: [GroupEvents] = []
@@ -45,8 +47,17 @@ struct DayAvailabilityView: View {
     private let avatarRowHeight: CGFloat = 50
     private let baseHourHeight: CGFloat = 54
 
+    @State private var availabilityStore = AvailabilityStore.shared
+
     private var calculator: AvailabilityCalculator {
-        AvailabilityCalculator(calendar: calendar)
+        AvailabilityCalculator(
+            calendar: calendar,
+            personalEvents: personalEvents,
+            importedEvents: importedEvents,
+            groupEvents: groupEvents,
+            sharedBusy: availabilityStore.busyIntervals(inGroup: groupID),
+            sharedUpdatedAt: availabilityStore.updatedAt(inGroup: groupID)
+        )
     }
 
     private var window: DateInterval {
@@ -201,6 +212,12 @@ struct DayAvailabilityView: View {
                             stroke: .orange,
                             dashed: true
                         ),
+                        CalendarLegendEntry(
+                            title: "Not shared yet",
+                            fill: .clear,
+                            stroke: .secondary,
+                            dashed: true
+                        ),
                     ]
                 )
                 .presentationCompactAdaptation(.popover)
@@ -300,22 +317,30 @@ struct DayAvailabilityView: View {
 
     @ViewBuilder
     private func memberColumn(_ member: Person, columnWidth: CGFloat) -> some View {
-        let isCurrentUser = member.id == Person.currentUser.id
-        let busy = calculator.busyIntervals(for: member, on: date)
+        let status = calculator.status(for: member)
+        let busy = calculator.memberBusyIntervals(for: member, on: date)
+        let isCurrentUser = member.isCurrentUser
 
         ZStack(alignment: .topLeading) {
-            // The whole window is free until a busy block says otherwise.
-            colors.green.opacity(0.12)
+            // A member who hasn't shared is not silently shown as free.
+            colors.green.opacity(status == .sharing ? 0.12 : 0.03)
 
             if isCurrentUser {
-                // Your personal calendar is synced here read only.
+                // Your own events stay on this device; only you see the titles.
                 ForEach(timedPersonalItems) { item in
                     personalBlock(item, columnWidth: columnWidth)
                 }
             } else {
+                // Anonymous busy intervals published by this member.
                 ForEach(Array(busy.enumerated()), id: \.offset) { _, interval in
                     busyBlock(interval, tint: member.tint, columnWidth: columnWidth)
                 }
+            }
+
+            if status == .notSharing {
+                notSharedOverlay(columnWidth: columnWidth)
+            } else if status == .stale {
+                staleBadge()
             }
         }
         .frame(width: columnWidth, height: gridHeight)
@@ -324,6 +349,50 @@ struct DayAvailabilityView: View {
                 .fill(Color.primary.opacity(0.06))
                 .frame(width: 1)
         }
+    }
+
+    /// Diagonal hatching for a member who has not published anything.
+    private func notSharedOverlay(columnWidth: CGFloat) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: "eye.slash")
+            Text("Not shared")
+                .font(.caption2)
+        }
+        .foregroundStyle(.secondary)
+        .frame(width: columnWidth, height: gridHeight)
+        .background {
+            Canvas { context, size in
+                var path = SwiftUI.Path()
+                let spacing: CGFloat = 12
+
+                for x in stride(
+                    from: -size.height,
+                    through: size.width,
+                    by: spacing
+                ) {
+                    path.move(to: CGPoint(x: x, y: 0))
+                    path.addLine(to: CGPoint(x: x + size.height, y: size.height))
+                }
+
+                context.stroke(
+                    path,
+                    with: .color(.secondary.opacity(0.14)),
+                    lineWidth: 1
+                )
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func staleBadge() -> some View {
+        Text("Out of date")
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(.orange)
+            .padding(2)
+            .background(.background, in: Capsule())
+            .padding(.top, 2)
+            .padding(.leading, 2)
+            .allowsHitTesting(false)
     }
 
     private func busyBlock(

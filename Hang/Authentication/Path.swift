@@ -22,5 +22,9 @@ struct Path {
         // Subcollection under each group document for shared events:
         // groups/<groupID>/events/<eventID>
         static let Events = "events"
+
+        // Subcollection under each group document for anonymous busy times:
+        // groups/<groupID>/availability/<uid>. Contains only start/end pairs.
+        static let Availability = "availability"
     }
 }

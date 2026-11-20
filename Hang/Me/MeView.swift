@@ -127,22 +127,12 @@ struct PersonalCalendarView: View {
     private func weekdayCell(at index: Int) -> some View {
         let isToday = index == todayWeekdayIndex
 
-        let textColor: Color = isToday ? .primary : .gray
-
-        let backgroundColor: Color =
-            isToday
-            ? .secondary.opacity(0.4)
-            : .secondary.opacity(0.2)
-
         return Text(weekdays[index])
             .font(.subheadline)
             .frame(maxWidth: .infinity)
-            .foregroundStyle(textColor)
+            .bold()
+            .foregroundStyle(.secondary)
             .padding(.vertical, 3)
-            .background(
-                backgroundColor,
-                in: RoundedRectangle(cornerRadius: 8)
-            )
     }
 
     var body: some View {
@@ -267,7 +257,7 @@ struct PersonalCalendarView: View {
                     Image(systemName: "chevron.right")
                 }
             }
-            .tint(.primary)
+//            .tint(.primary)
             .padding(.horizontal)
 
             HStack(spacing: 2) {

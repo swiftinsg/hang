@@ -20,11 +20,6 @@ struct CreateGroupView: View {
                     .background(Color(.secondarySystemBackground))
                     .clipShape(.capsule)
 
-                TextField("Description", text: $groupDesc, axis: .vertical)
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(.capsule)
-
                 VStack {
                     Text("Invite friends with code")
                         .font(.callout)

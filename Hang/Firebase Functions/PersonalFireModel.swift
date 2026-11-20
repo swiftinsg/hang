@@ -20,6 +20,9 @@ struct PersonalEventData: Identifiable, Codable {
     @DocumentID var id: String?
     var name: String
     var desc: String
+    /// Where the event happens. Stored with the account so it follows the user
+    /// onto every device, just like the rest of the personal calendar entry.
+    var location: String = ""
     /// When the event starts.
     var time: Timestamp
     /// When the event ends. Optional so events written without an end time
@@ -29,8 +32,24 @@ struct PersonalEventData: Identifiable, Codable {
     init(event: GroupEvents) {
         self.name = event.name
         self.desc = event.desc
+        self.location = event.location
         self.time = Timestamp(date: event.startDate)
         self.endTime = Timestamp(date: event.endDate)
+    }
+
+    /// Older documents were written without `location`. Default it so they
+    /// still decode instead of disappearing from the personal calendar.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        desc = try container.decode(String.self, forKey: .desc)
+        location = try container.decodeIfPresent(String.self, forKey: .location) ?? ""
+        time = try container.decode(Timestamp.self, forKey: .time)
+        endTime = try container.decodeIfPresent(Timestamp.self, forKey: .endTime)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, desc, location, time, endTime
     }
 
     /// Rebuilds the in-app event. The Firestore document ID is the event's
@@ -40,6 +59,7 @@ struct PersonalEventData: Identifiable, Codable {
             id: UUID(uuidString: documentID) ?? UUID(),
             name: name,
             desc: desc,
+            location: location,
             time: time.dateValue().timeIntervalSince1970,
             endTime: endTime?.dateValue().timeIntervalSince1970
         )

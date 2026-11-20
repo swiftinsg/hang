@@ -8,6 +8,7 @@ struct CreateEventView: View {
 
     @State private var eventName = ""
     @State private var eventDesc = ""
+    @State private var eventLocation = ""
     @State private var startDate: Date
     @State private var endDate: Date
 
@@ -30,6 +31,7 @@ struct CreateEventView: View {
                 Section("Details") {
                     TextField("Name", text: $eventName)
                     TextField("Description", text: $eventDesc, axis: .vertical)
+                    TextField("Location (optional)", text: $eventLocation)
                 }
 
                 Section("Date and Time") {
@@ -67,6 +69,9 @@ struct CreateEventView: View {
                                 in: .whitespacesAndNewlines
                             ),
                             desc: eventDesc.trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            ),
+                            location: eventLocation.trimmingCharacters(
                                 in: .whitespacesAndNewlines
                             ),
                             time: startDate.timeIntervalSince1970,

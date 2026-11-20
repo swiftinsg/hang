@@ -1,0 +1,91 @@
+rules_version = '2';
+
+// Hang — Firestore security rules.
+//
+// The privacy promise is "groups see WHEN you are busy, never WHY". It is
+// enforced here as well as in the client: an availability document has a
+// closed top-level schema with no field that could hold a title, note,
+// location, calendar name or event id. Nobody outside the group can read it.
+//
+// The rest of the rules preserve the app's current groups/users schema and
+// access behavior; only the availability subcollection is newly restricted.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // `groups/{groupID}.people` holds references to `users/<uid>` documents.
+    function isGroupMember(groupID) {
+      return signedIn()
+        && get(/databases/$(database)/documents/groups/$(groupID))
+             .data.people
+             .hasAny([/databases/$(database)/documents/users/$(request.auth.uid)]);
+    }
+
+    // --------------------------------------------------------------- profiles
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+
+      // Personal events created in the Me tab stay under the owner's account.
+      match /calendar/{eventID} {
+        allow read, write: if signedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // ----------------------------------------------------------------- groups
+    match /groups/{groupID} {
+      // Signed-in lookup by invite code and listing your own groups both rely
+      // on reads here. Tightening these is a separate task; the availability
+      // subcollection below is restricted independently.
+      allow read: if signedIn();
+      allow write: if signedIn();
+
+      // Group events are shared with the whole group by design (their names
+      // are meant to be seen), unlike personal availability.
+      match /events/{eventID} {
+        allow read, write: if signedIn();
+      }
+
+      // --------------------------------------------------------- availability
+      //
+      // THE PRIVACY BOUNDARY.
+      //
+      // Exactly three top-level fields are allowed, and none can carry an
+      // event name. `days` is capped at 40 entries (about a month of busy
+      // time) so a document can never become a calendar dump.
+      //
+      // Rules cannot iterate a list, so the contents of each day entry cannot
+      // be type-checked here. The client decodes only `date` and the number
+      // pairs in `intervals`; extra keys inside `days` are ignored.
+      match /availability/{uid} {
+        function validPayload() {
+          let data = request.resource.data;
+          return data.keys().hasOnly(['timezoneIdentifier', 'updatedAt', 'days'])
+            && data.timezoneIdentifier is string
+            && data.timezoneIdentifier.size() > 0
+            && data.timezoneIdentifier.size() <= 64
+            && data.updatedAt == request.time
+            && data.days is list
+            && data.days.size() <= 40;
+        }
+
+        // Only members of this group may see when you are busy.
+        allow read: if isGroupMember(groupID);
+
+        // You can only publish your own busy times, and only while you belong
+        // to the group.
+        allow create, update: if signedIn()
+          && request.auth.uid == uid
+          && isGroupMember(groupID)
+          && validPayload();
+
+        // Turning sharing off, or leaving, deletes the document. Deletion is
+        // allowed by uid alone so it still works after membership is removed.
+        allow delete: if signedIn() && request.auth.uid == uid;
+      }
+    }
+  }
+}

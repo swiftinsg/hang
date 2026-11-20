@@ -27,10 +27,9 @@ struct JoinGroupView: View {
                     }
 
                     TextField("", text: $code)
-                        .keyboardType(.numberPad)
                         .textContentType(.oneTimeCode)  // Enables iOS SMS AutoFill
                         .focused($isFocused)
-//                        .accentColor(.clear)
+                        .accentColor(.clear)
                         .foregroundColor(.clear)
                         .background(Color.clear)
                         .onChange(of: code) { _, newValue in
@@ -97,7 +96,7 @@ struct JoinGroupView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(
-                        isCurrentBox ? Color.accentColor : Color.clear,
+                        isCurrentBox ? Color("AccentColor") : Color.clear,
                         lineWidth: 2
                     )
             )

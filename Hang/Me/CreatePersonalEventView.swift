@@ -22,6 +22,7 @@ struct CreatePersonalEventView: View {
 
     @State private var eventName = ""
     @State private var eventDesc = ""
+    @State private var eventLocation = ""
     @State private var startDate: Date
     @State private var endDate: Date
 
@@ -66,6 +67,7 @@ struct CreatePersonalEventView: View {
                 Section("Details") {
                     TextField("Name", text: $eventName)
                     TextField("Description", text: $eventDesc, axis: .vertical)
+                    TextField("Location (optional)", text: $eventLocation)
                 }
 
                 Section("Date and Time") {
@@ -174,7 +176,7 @@ struct CreatePersonalEventView: View {
                     Button("Add") {
                         addEvents()
                     }
-                    .tint(colors.dgreen)
+//                    .tint(.red)
                     .disabled(!canSave)
                 }
             }
@@ -280,6 +282,9 @@ struct CreatePersonalEventView: View {
     private func addEvents() {
         let name = eventName.trimmingCharacters(in: .whitespacesAndNewlines)
         let desc = eventDesc.trimmingCharacters(in: .whitespacesAndNewlines)
+        let location = eventLocation.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
         // Every occurrence keeps the same duration as the original event.
         let duration = endDate.timeIntervalSince(startDate)
 
@@ -287,6 +292,7 @@ struct CreatePersonalEventView: View {
             GroupEvents(
                 name: name,
                 desc: desc,
+                location: location,
                 time: occurrenceStart.timeIntervalSince1970,
                 endTime: occurrenceStart.addingTimeInterval(duration)
                     .timeIntervalSince1970
@@ -370,7 +376,7 @@ struct RepeatDatePickerView: View {
                         selectedDates = draftDates
                         dismiss()
                     }
-                    .tint(colors.dgreen)
+//                    .tint(.red)
                     .disabled(draftDates.isEmpty)
                 }
             }
@@ -397,7 +403,7 @@ struct RepeatDatePickerView: View {
                 Image(systemName: "chevron.right")
             }
         }
-        .tint(.primary)
+//        .tint(.primary)
         .padding(.horizontal)
     }
 
@@ -441,7 +447,7 @@ struct RepeatDatePickerView: View {
                 draftDates = [requiredDate]
             }
             .font(.footnote)
-            .tint(colors.dgreen)
+//            .tint(.red)
         }
         .padding(.horizontal)
     }

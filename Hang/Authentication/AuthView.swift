@@ -23,7 +23,7 @@ struct AuthView: View {
                             .black
                         )
                         .font(.largeTitle)
-                        .fontDesign(.rounded)
+//                        .fontDesign(.rounded)
                     }
 
                     Text(
