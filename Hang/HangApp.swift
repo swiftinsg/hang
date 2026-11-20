@@ -20,7 +20,7 @@ struct SwiftChallenge2App: App {
     var body: some Scene {
         WindowGroup {
             MainView()
-                // FirebaseSignInWithApple creates Profiles/<uid> for every new account
+                // FirebaseSignInWithApple creates users/<uid> for every new account
                 .configureFirebaseSignInWithAppleWith(firestoreUserCollectionPath: Path.Firestore.Users)
         }
     }

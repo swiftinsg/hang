@@ -29,6 +29,10 @@ struct MainView: View {
     }
 }
 
-#Preview {
-    MainView()
+#Preview("Signed out") {
+    let auth = FirebaseSignInWithAppleKey.defaultValue
+    auth.state = .notAuthenticated
+
+    return MainView()
+        .environment(\.firebaseSignInWithApple, auth)
 }

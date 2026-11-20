@@ -1,0 +1,13 @@
+{
+  "mcp": {
+    "servers": {
+      "firebase": {
+        "type": "local",
+        "command": [
+          "firebase",
+          "mcp"
+        ]
+      }
+    }
+  }
+}

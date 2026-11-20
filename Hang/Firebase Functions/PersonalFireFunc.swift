@@ -18,7 +18,7 @@ class SaveManager: ObservableObject {
     @Published var hasLoadedProfile = false
     private var listener: ListenerRegistration?
 
-    // Each Apple account gets its own document: Profiles/<firebase uid>
+    // Each Apple account gets its own document: users/<firebase uid>
     private var profileDocument: DocumentReference? {
         guard let uid = Auth.auth().currentUser?.uid else { return nil }
         return db.collection(Path.Firestore.Users).document(uid)
