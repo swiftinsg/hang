@@ -296,7 +296,6 @@ struct CalendarView: View {
         let hasGroupEvents = tg.events.contains { event in
             event.startDate < dayEnd && event.endDate > dayStart
         }
-        let hasCalendarEvents = hasImportedEvents || hasPersonalEvents
 
         let isTopAvailable =
             topAvailableDays.contains(calendar.startOfDay(for: date))

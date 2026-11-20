@@ -64,6 +64,7 @@ struct PersonalCalendarView: View {
     @State private var selectedDate: Date? = Date()
     @State private var activeSheet: PersonalCalendarSheet?
     @State private var calendarStore = PersonalCalendarStore.shared
+    @State private var personalStore = PersonalEventsStore.shared
 
     // MARK: - Month grid
 
@@ -190,13 +191,22 @@ struct PersonalCalendarView: View {
             case .create:
                 CreatePersonalEventView(
                     events: $personalEvents,
-                    initialDate: selectedDate ?? Date()
+                    initialDate: selectedDate ?? Date(),
+                    onSave: { newEvents in
+                        personalStore.add(newEvents)
+                    }
                 )
                 .presentationDetents([.large])
             case .edit(let event):
                 EditEventView(
                     events: $personalEvents,
-                    eventID: event.id
+                    eventID: event.id,
+                    onSave: { updatedEvent in
+                        personalStore.update(updatedEvent)
+                    },
+                    onDelete: { eventID in
+                        personalStore.delete(eventID)
+                    }
                 )
                 .presentationDetents([.medium, .large])
             }

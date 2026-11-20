@@ -42,12 +42,28 @@ public struct TestGroup: Hashable, Identifiable {
 }
 
 public struct GroupEvents: Hashable, Identifiable {
-    public let id = UUID()
+    public let id: UUID
     var name: String
     var desc: String = "Add description here..."
     var time: Double
     /// Optional end time. Events created before this was added only store a start.
     var endTime: Double? = nil
+
+    /// `id` can be supplied so events loaded from Firestore keep the same
+    /// identity across refreshes (the document ID is stored as a UUID).
+    public init(
+        id: UUID = UUID(),
+        name: String,
+        desc: String = "Add description here...",
+        time: Double,
+        endTime: Double? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.desc = desc
+        self.time = time
+        self.endTime = endTime
+    }
 }
 
 extension GroupEvents {

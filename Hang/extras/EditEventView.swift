@@ -15,15 +15,27 @@ struct EditEventView: View {
     @Binding var events: [GroupEvents]
     let eventID: UUID
 
+    /// Called after an edit is saved so the change can be persisted.
+    var onSave: ((GroupEvents) -> Void)? = nil
+    /// Called when the event is deleted so it can be removed from storage.
+    var onDelete: ((UUID) -> Void)? = nil
+
     @State private var eventName: String
     @State private var eventDesc: String
     @State private var startDate: Date
     @State private var endDate: Date
     @State private var isConfirmingDelete = false
 
-    init(events: Binding<[GroupEvents]>, eventID: UUID) {
+    init(
+        events: Binding<[GroupEvents]>,
+        eventID: UUID,
+        onSave: ((GroupEvents) -> Void)? = nil,
+        onDelete: ((UUID) -> Void)? = nil
+    ) {
         _events = events
         self.eventID = eventID
+        self.onSave = onSave
+        self.onDelete = onDelete
 
         let event = events.wrappedValue.first(where: { $0.id == eventID })
         _eventName = State(initialValue: event?.name ?? "")
@@ -121,10 +133,12 @@ struct EditEventView: View {
         )
         events[index].time = startDate.timeIntervalSince1970
         events[index].endTime = endDate.timeIntervalSince1970
+        onSave?(events[index])
         dismiss()
     }
 
     private func deleteEvent() {
+        onDelete?(eventID)
         events.removeAll { $0.id == eventID }
         dismiss()
     }

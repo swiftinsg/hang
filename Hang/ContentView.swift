@@ -16,6 +16,8 @@ struct ContentView: View {
         }
         .onAppear {
             saveManager.loadProfile()
+            // Keep the personal calendar in sync with the signed-in account.
+            PersonalEventsStore.shared.startListening()
         }
         .onChange(of: saveManager.hasLoadedProfile) { _, loaded in
             guard loaded else { return }

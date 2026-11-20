@@ -17,6 +17,9 @@ struct CreatePersonalEventView: View {
     var colors = Colors()
     @Binding var events: [GroupEvents]
 
+    /// Called with the events that were just created so they can be persisted.
+    var onSave: (([GroupEvents]) -> Void)? = nil
+
     @State private var eventName = ""
     @State private var eventDesc = ""
     @State private var startDate: Date
@@ -33,8 +36,13 @@ struct CreatePersonalEventView: View {
         return calendar
     }()
 
-    init(events: Binding<[GroupEvents]>, initialDate: Date = Date()) {
+    init(
+        events: Binding<[GroupEvents]>,
+        initialDate: Date = Date(),
+        onSave: (([GroupEvents]) -> Void)? = nil
+    ) {
         _events = events
+        self.onSave = onSave
 
         // Default to a 9–10am slot on the chosen day so the time pickers start
         // somewhere sensible instead of at midnight.
@@ -275,17 +283,21 @@ struct CreatePersonalEventView: View {
         // Every occurrence keeps the same duration as the original event.
         let duration = endDate.timeIntervalSince(startDate)
 
-        for occurrenceStart in occurrenceDates {
-            events.append(
-                GroupEvents(
-                    name: name,
-                    desc: desc,
-                    time: occurrenceStart.timeIntervalSince1970,
-                    endTime: occurrenceStart.addingTimeInterval(duration)
-                        .timeIntervalSince1970
-                )
+        let created = occurrenceDates.map { occurrenceStart in
+            GroupEvents(
+                name: name,
+                desc: desc,
+                time: occurrenceStart.timeIntervalSince1970,
+                endTime: occurrenceStart.addingTimeInterval(duration)
+                    .timeIntervalSince1970
             )
         }
+
+        events.append(contentsOf: created)
+
+        // Persist what was created. The store's snapshot listener will refresh
+        // the list once Firestore confirms the writes.
+        onSave?(created)
 
         dismiss()
     }
