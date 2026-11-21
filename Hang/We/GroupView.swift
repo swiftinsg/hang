@@ -526,6 +526,8 @@ struct EventView: View {
                                         )
                                 )
                                 Divider()
+                                    .frame(width:1)
+                                    .overlay(Color.gray)
                                 Text(
                                     event.endTime == nil
                                         ? Date(
@@ -553,6 +555,9 @@ struct EventView: View {
                                             )
                                 )
                                 Divider()
+                                    .frame(width:1)
+                                    .overlay(Color.gray)
+                                
                                 Text(event.location.isEmpty ? "No location" : event.location)
                             }
                             .font(.subheadline)
