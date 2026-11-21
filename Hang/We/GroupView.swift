@@ -192,6 +192,17 @@ struct CalendarView: View {
         return (originalIndex + 6) % 7
     }
 
+    private func isPastDate(_ date: Date) -> Bool {
+        date < calendar.startOfDay(for: Date())
+    }
+
+    /// Past days can't be selected, so never pass one to the timeline or a
+    /// create sheet (e.g. if the app stays open past midnight).
+    private var effectiveSelectedDate: Date {
+        let selected = selectedDate ?? Date()
+        return isPastDate(selected) ? Date() : selected
+    }
+
     private func changeMonth(by value: Int) {
         displayedMonth =
             calendar.date(byAdding: .month, value: value, to: displayedMonth)
@@ -229,7 +240,7 @@ struct CalendarView: View {
                     .padding(.vertical, 8)
 
                 DayAvailabilityView(
-                    date: selectedDate ?? Date(),
+                    date: effectiveSelectedDate,
                     groupID: tg.documentID,
                     members: members,
                     calendar: calendar,
@@ -251,7 +262,7 @@ struct CalendarView: View {
             case .create:
                 CreateEventView(
                     tg: $tg,
-                    initialDate: selectedDate ?? Date()
+                    initialDate: effectiveSelectedDate
                 )
                 .presentationDetents([.medium, .large])
             case .edit(let event):
@@ -306,8 +317,13 @@ struct CalendarView: View {
 
     private var monthGrid: some View {
         let days = generateMonthGrid()
-        let fractions = availability.dailyFractions(for: days, members: members)
-        let topDays = topAvailableDays(among: days, fractions: fractions)
+        // Past days are never scored or eligible for the best-days outline.
+        let upcomingDays = days.filter { !isPastDate($0) }
+        let fractions = availability.dailyFractions(
+            for: upcomingDays,
+            members: members
+        )
+        let topDays = topAvailableDays(among: upcomingDays, fractions: fractions)
 
         return LazyVGrid(
             columns: Array(
@@ -327,7 +343,8 @@ struct CalendarView: View {
     }
 
     // A single day in the month grid, including its availability shading,
-    // outlines, and event marker.
+    // outlines, and event marker. Days before today are disabled and shown as
+    // plain gray cells with no shading, markers, or outlines.
     private func dayCell(
         for date: Date,
         topAvailableDays: Set<Date>,
@@ -338,28 +355,21 @@ struct CalendarView: View {
             equalTo: displayedMonth,
             toGranularity: .month
         )
+        let isPastDate = isPastDate(date)
 
-        let isSelected =
-            selectedDate.map { calendar.isDate($0, inSameDayAs: date) } ?? false
+        let isSelected = !isPastDate
+            && (selectedDate.map { calendar.isDate($0, inSameDayAs: date) } ?? false)
 
         let dayStart = calendar.startOfDay(for: date)
         let dayEnd =
             calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
 
-        let importedEventsToday = calendarStore.events(
-            on: date,
-            calendar: calendar
-        )
-        let hasImportedEvents = !importedEventsToday.isEmpty
-        let hasPersonalEvents = personalStore.events.contains { event in
-            event.startDate < dayEnd && event.endDate > dayStart
-        }
-        let hasGroupEvents = tg.events.contains { event in
+        let hasGroupEvents = !isPastDate && tg.events.contains { event in
             event.startDate < dayEnd && event.endDate > dayStart
         }
 
-        let isTopAvailable =
-            topAvailableDays.contains(calendar.startOfDay(for: date))
+        let isTopAvailable = !isPastDate
+            && topAvailableDays.contains(calendar.startOfDay(for: date))
 
         let freeFraction =
             fractions[calendar.startOfDay(for: date)] ?? 0
@@ -373,23 +383,32 @@ struct CalendarView: View {
             Text("\(calendar.component(.day, from: date))")
                 .font(.subheadline)
                 .frame(maxWidth: .infinity, minHeight: 45)
-                .overlay(alignment: .bottom) {
-                    HStack(spacing: 2) {
-                        if hasGroupEvents {
-                            Image(systemName: "person.3")
-                        }
-                    }
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.orange)
-                    .padding(.bottom, 4)
-                }
-                .foregroundStyle(isCurrentMonth ? .primary : .secondary)
-                .background(
-                    colors.green.opacity(
-                        isCurrentMonth ? shading : shading * 0.4
-                    ),
-                    in: RoundedRectangle(cornerRadius: 8)
+                .foregroundStyle(
+                    isPastDate
+                        ? Color.secondary.opacity(0.45)
+                        : (isCurrentMonth ? Color.primary : Color.secondary)
                 )
+                .background {
+                    if isPastDate {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(.systemGray5))
+                    } else {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(
+                                colors.green.opacity(
+                                    isCurrentMonth ? shading : shading * 0.4
+                                )
+                            )
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    if hasGroupEvents {
+                        Image(systemName: "person.3")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.orange)
+                            .padding(.bottom, 4)
+                    }
+                }
                 .overlay {
                     // Most available days of the month.
                     if isTopAvailable {
@@ -419,15 +438,23 @@ struct CalendarView: View {
                 }
         }
         .buttonStyle(.plain)
+        .disabled(isPastDate)
+        .accessibilityLabel(
+            isPastDate
+                ? "\(calendar.component(.day, from: date)), unavailable past date"
+                : "\(calendar.component(.day, from: date))"
+        )
     }
 
-    // The three days of the displayed month where the group is most free.
+    // The three upcoming days of the displayed month where the group is most
+    // free. Past days are never eligible.
     private func topAvailableDays(
         among days: [Date],
         fractions: [Date: Double]
     ) -> Set<Date> {
         let monthDays = days.filter {
-            calendar.isDate($0, equalTo: displayedMonth, toGranularity: .month)
+            !isPastDate($0)
+                && calendar.isDate($0, equalTo: displayedMonth, toGranularity: .month)
         }
 
         let best =
