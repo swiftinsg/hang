@@ -32,7 +32,7 @@ struct ProfileView: View {
                 }
             }
 
-            Section("Add Reminders") {
+            Section("Reminders") {
                 Picker(
                     "All events",
                     selection: Binding(
@@ -46,9 +46,9 @@ struct ProfileView: View {
                 }
 
                 Text(
-                    "Hang will notify you this long before every event — personal, group and device calendar events. Saved to your account, so you can change it any time."
+                    "Hang will send a notification this long before every group hangout."
                 )
-                .font(.caption)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
 
                 if selectedReminder != .none && permission != .granted {

@@ -58,12 +58,12 @@ struct CreateEventView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("Cancel", systemImage: "xmark") {
                         dismiss()
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
+                    Button("Add", systemImage: "checkmark") {
                         let event = GroupEvents(
                             name: eventName.trimmingCharacters(
                                 in: .whitespacesAndNewlines
@@ -81,7 +81,8 @@ struct CreateEventView: View {
                         GroupStore.shared.addEvent(event, to: tg)
                         dismiss()
                     }
-//                    .tint(.red)
+                    .buttonStyle(.glassProminent)
+                    .tint(.accent)
                     .disabled(!canSave)
                 }
             }

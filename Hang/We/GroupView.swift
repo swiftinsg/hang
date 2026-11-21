@@ -329,7 +329,10 @@ struct CalendarView: View {
             for: upcomingDays,
             members: members
         )
-        let topDays = topAvailableDays(among: upcomingDays, fractions: fractions)
+        let topDays = topAvailableDays(
+            among: upcomingDays,
+            fractions: fractions
+        )
 
         return LazyVGrid(
             columns: Array(
@@ -363,18 +366,23 @@ struct CalendarView: View {
         )
         let isPastDate = isPastDate(date)
 
-        let isSelected = !isPastDate
-            && (selectedDate.map { calendar.isDate($0, inSameDayAs: date) } ?? false)
+        let isSelected =
+            !isPastDate
+            && (selectedDate.map { calendar.isDate($0, inSameDayAs: date) }
+                ?? false)
 
         let dayStart = calendar.startOfDay(for: date)
         let dayEnd =
             calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
 
-        let hasGroupEvents = !isPastDate && tg.events.contains { event in
-            event.startDate < dayEnd && event.endDate > dayStart
-        }
+        let hasGroupEvents =
+            !isPastDate
+            && tg.events.contains { event in
+                event.startDate < dayEnd && event.endDate > dayStart
+            }
 
-        let isTopAvailable = !isPastDate
+        let isTopAvailable =
+            !isPastDate
             && topAvailableDays.contains(calendar.startOfDay(for: date))
 
         let freeFraction =
@@ -460,7 +468,11 @@ struct CalendarView: View {
     ) -> Set<Date> {
         let monthDays = days.filter {
             !isPastDate($0)
-                && calendar.isDate($0, equalTo: displayedMonth, toGranularity: .month)
+                && calendar.isDate(
+                    $0,
+                    equalTo: displayedMonth,
+                    toGranularity: .month
+                )
         }
 
         let best =
@@ -476,18 +488,24 @@ struct CalendarView: View {
     // Floating action button, pinned to the bottom of the screen so it stays
     // reachable while the calendar page is scrolled.
     private var createEventButton: some View {
-        Button {
+        NewGroupEventButton {
             activeSheet = .create
-        } label: {
-            Image(systemName: "plus")
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(width: 60, height: 60)
-                .background(colors.dgreen, in: Circle())
-                .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
         }
-        .padding(20)
-        .accessibilityLabel("New event")
+    }
+}
+
+// Shared floating "New event" button used by both the Calendar and Events tabs.
+struct NewGroupEventButton: View {
+    var colors = Colors()
+    var action: () -> Void
+
+    var body: some View {
+        Button("New event", systemImage: "plus", action: action)
+            .font(.title2.weight(.semibold))
+            .buttonStyle(.glassProminent)
+            .controlSize(.large)
+            .tint(colors.dgreen)
+            .padding(.horizontal, 32)
     }
 }
 
@@ -498,105 +516,118 @@ struct EventView: View {
     var colors = Colors()
     @State private var showAddView = false
     @State private var activeSheet: GroupCalendarSheet?
-    var body: some View {
-        if $tg.events.isEmpty {
-            VStack {
-                Image("trayHang")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: sizing.x5*7)
-                    .padding(.bottom, sizing.x10)
-                Text("No Events")
-                    .bold()
-                Text("Go arrange a hangout with your friends!")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxHeight: .infinity)
-        } else {
-            List {
-                ForEach($tg.events) { $event in
-                    Button {
-                        activeSheet = .edit(event)
-                    } label: {
-                        VStack(alignment: .leading) {
-                            Text(event.name)
-                                .font(.title3)
-                                .fontWeight(.bold)
 
-                            HStack {
-                                Text(
-                                    Date(timeIntervalSince1970: event.time)
-                                        .formatted(
-                                            date: .abbreviated,
-                                            time: .omitted
-                                        )
-                                )
-                                Divider()
-                                Text(
-                                    event.endTime == nil
-                                        ? Date(
-                                            timeIntervalSince1970: event.time
-                                        )
-                                        .formatted(
-                                            date: .omitted,
-                                            time: .shortened
-                                        )
-                                        : Date(
-                                            timeIntervalSince1970: event.time
-                                        )
-                                        .formatted(
-                                            date: .omitted,
-                                            time: .shortened
-                                        ) + "-"
-                                            + Date(
+    var body: some View {
+        Group {
+            if $tg.events.isEmpty {
+                VStack {
+                    Image(systemName: "tray")
+                        .bold()
+                        .foregroundStyle(.secondary)
+                        .font(.largeTitle)
+                        .padding(.bottom, 8)
+                    Text("No Events")
+                        .bold()
+                    Text("Go arrange a hangout with your friends!")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxHeight: .infinity)
+            } else {
+                List {
+                    ForEach($tg.events) { $event in
+                        Button {
+                            activeSheet = .edit(event)
+                        } label: {
+                            VStack(alignment: .leading) {
+                                Text(event.name)
+                                    .font(.title3)
+                                    .fontWeight(.bold)
+
+                                HStack {
+                                    Text(
+                                        Date(timeIntervalSince1970: event.time)
+                                            .formatted(
+                                                date: .abbreviated,
+                                                time: .omitted
+                                            )
+                                    )
+                                    Divider()
+                                    Text(
+                                        event.endTime == nil
+                                            ? Date(
                                                 timeIntervalSince1970: event
-                                                    .endTime
-                                                    ?? 0
+                                                    .time
                                             )
                                             .formatted(
                                                 date: .omitted,
                                                 time: .shortened
                                             )
-                                )
-                                Divider()
-                                Text(event.location.isEmpty ? "No location" : event.location)
-                            }
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                                            : Date(
+                                                timeIntervalSince1970: event
+                                                    .time
+                                            )
+                                            .formatted(
+                                                date: .omitted,
+                                                time: .shortened
+                                            ) + "-"
+                                                + Date(
+                                                    timeIntervalSince1970: event
+                                                        .endTime
+                                                        ?? 0
+                                                )
+                                                .formatted(
+                                                    date: .omitted,
+                                                    time: .shortened
+                                                )
+                                    )
+                                    Divider()
+                                    Text(
+                                        event.location.isEmpty
+                                            ? "No location" : event.location
+                                    )
+                                }
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
 
-                            Text(event.desc)
-                                .lineLimit(5)
-                                .padding(.top, 4)
+                                Text(event.desc)
+                                    .lineLimit(5)
+                                    .padding(.top, 4)
+                            }
+                            .foregroundStyle(Color.primary)
                         }
-                        .foregroundStyle(Color.primary)
+                        .listRowBackground(Color(.secondarySystemBackground))
                     }
-                    .listRowBackground(Color(.systemGray6))
                 }
+                .padding(.top, -sizing.x4)
+                .scrollContentBackground(.hidden)
             }
-            .padding(.top, -sizing.x4)
-            .scrollContentBackground(.hidden)
-            .sheet(item: $activeSheet) { sheet in
-                switch sheet {
-                case .create:
-                    CreateEventView(
-                        tg: $tg,
-                        initialDate: Date()
-                    )
-                    .presentationDetents([.medium, .large])
-                case .edit(let event):
-                    EditEventView(
-                        events: $tg.events,
-                        eventID: event.id,
-                        onSave: { updatedEvent in
-                            GroupStore.shared.updateEvent(updatedEvent, to: tg)
-                        },
-                        onDelete: { eventID in
-                            GroupStore.shared.deleteEvent(eventID, from: tg)
-                        }
-                    )
-                    .presentationDetents([.medium, .large])
-                }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            NewGroupEventButton {
+                activeSheet = .create
+            }
+        }
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .create:
+                CreateEventView(
+                    tg: $tg,
+                    initialDate: Date()
+                )
+                .presentationDetents([.medium, .large])
+            case .edit(let event):
+                EditEventView(
+                    events: $tg.events,
+                    eventID: event.id,
+                    onSave: { updatedEvent in
+                        GroupStore.shared.updateEvent(updatedEvent, to: tg)
+                    },
+                    onDelete: { eventID in
+                        GroupStore.shared.deleteEvent(eventID, from: tg)
+                    }
+                )
+                .presentationDetents([.medium, .large])
             }
         }
     } 
@@ -613,17 +644,20 @@ struct MoreInfoView: View {
     var body: some View {
         List {
             Section("Invite code") {
-                Text(tg.code)
-                    .font(.title2.bold())
+                HStack(spacing: 4) {
+                    ForEach(0..<6, id: \.self) { index in
+                        otpDigitBox(at: index)
+                    }
+                }
             }
-            .listRowBackground(Color(.systemGray6))
+            .listRowBackground(Color(.secondarySystemBackground))
 
             Section("Description") {
                 Text(tg.desc)
                 Button("Edit description", systemImage: "pencil") {}
                     .foregroundStyle(Color(.accent))
             }
-            .listRowBackground(Color(.systemGray6))
+            .listRowBackground(Color(.secondarySystemBackground))
 
             Section("Members (\(tg.members.count))") {
                 ForEach(tg.members) { member in
@@ -645,7 +679,7 @@ struct MoreInfoView: View {
                     }
                 }
             }
-            .listRowBackground(Color(.systemGray6))
+            .listRowBackground(Color(.secondarySystemBackground))
 
             Button(role: .destructive) {
                 isConfirmingLeave = true
@@ -669,6 +703,19 @@ struct MoreInfoView: View {
                 "You'll be removed from the member list and stop seeing this group's events."
             )
         }
+    }
+
+    @ViewBuilder
+    private func otpDigitBox(at index: Int) -> some View {
+        //        guard index < tg.code.count else { return "" }
+        let stringIndex = tg.code.index(tg.code.startIndex, offsetBy: index)
+        let character = String(tg.code[stringIndex])
+
+        Text(character)
+            .font(.title2.bold())
+            .frame(width: 30, height: 40)
+            .background(Color(.secondarySystemFill))
+            .cornerRadius(8)
     }
 
     private func leaveGroup() {

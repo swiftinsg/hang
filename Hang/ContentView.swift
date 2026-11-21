@@ -166,6 +166,7 @@ struct ContentView: View {
                 Task { await GroupStore.shared.refreshMyDisplayName() }
             }
             .keyboardShortcut(.defaultAction)
+            
             Button("Cancel", role: .cancel) {}
         }
     }
