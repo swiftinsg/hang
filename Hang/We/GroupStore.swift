@@ -281,15 +281,15 @@ final class GroupStore {
             errorMessage = "This group isn't saved to Firestore yet."
             return
         }
-
-        eventsCollection(for: group.documentID)
-            .document(eventID.uuidString)
-            .delete { [weak self] error in
-                guard let error else { return }
-                Task { @MainActor in
-                    self?.errorMessage = error.localizedDescription
-                }
+        Task {
+            do {
+                try await eventsCollection(for: group.documentID)
+                    .document(eventID.uuidString)
+                    .delete()
+            } catch {
+                self.errorMessage = error.localizedDescription
             }
+        }
     }
 
     /// `groups/<groupID>/events`

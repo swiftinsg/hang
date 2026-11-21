@@ -137,7 +137,6 @@ struct PersonalCalendarView: View {
     }
 
     private func weekdayCell(at index: Int) -> some View {
-        let isToday = index == todayWeekdayIndex
 
         return Text(weekdays[index])
             .font(.subheadline)
@@ -296,7 +295,6 @@ struct PersonalCalendarView: View {
         }
     }
 
-    // A single day in the month grid, including event markers and outlines.
     // Days before today are disabled and shown as plain gray cells.
     private func dayCell(for date: Date) -> some View {
         let isCurrentMonth = calendar.isDate(
@@ -343,21 +341,6 @@ struct PersonalCalendarView: View {
                             .fill(Color(.systemGray5))
                     }
                 }
-                .overlay(alignment: .bottom) {
-                    if hasEvents {
-                        HStack(spacing: 2) {
-                            if hasCalendarEvents {
-                                Image(systemName: "calendar")
-                            }
-                            if hasGroupEvents {
-                                Image(systemName: "person.3")
-                            }
-                        }
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.orange)
-                        .padding(.bottom, 4)
-                    }
-                }
                 .overlay {
                     // Days that already have an event.
                     if hasEvents {
@@ -376,13 +359,17 @@ struct PersonalCalendarView: View {
                     if hasEvents {
                         HStack(spacing: 2) {
                             if hasGroupEvents {
+                                Image("flatTripleHang")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .scaleEffect(0.8)
+                                    .offset(y: cellSize.height*0.18)
+                            } else if hasCalendarEvents {
                                 Image("flatHang")
                                     .resizable()
                                     .scaledToFit()
-                                    .scaleEffect(0.7)
-                                    .offset(y: cellSize.height*0.16)
-                            } else if hasCalendarEvents {
-                                Image(systemName: "calendar")
+                                    .scaleEffect(0.6)
+                                    .offset(y: cellSize.height*0.17)
                             }
                         }
                         .font(.system(size: 9, weight: .bold))

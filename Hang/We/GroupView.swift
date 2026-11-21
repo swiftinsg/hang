@@ -29,7 +29,7 @@ struct GroupView: View {
     @Binding var tg: TestGroup
     @State private var selectedGroupTab: GroupTab = .events
     @State private var availabilityStore = AvailabilityStore.shared
-
+    @State var screenSize : CGSize = .zero
     var body: some View {
         NavigationStack {
             ZStack {
@@ -53,7 +53,7 @@ struct GroupView: View {
                     case .cal:
                         CalendarView(tg: $tg)
                     case .events:
-                        EventView(tg: $tg)
+                        EventView(tg: $tg, size: screenSize)
                     case .info:
                         MoreInfoView(tg: $tg)
                     }
@@ -83,6 +83,11 @@ struct GroupView: View {
                 }
             }
         }
+        .onGeometryChange(for: CGSize.self) { proxy in
+            proxy.size
+        } action: { newSize in
+            screenSize = newSize
+        }
     }
 }
 
@@ -96,8 +101,8 @@ struct GroupView: View {
                     Person(name: "seren", status: "i am skibidi")
                 ],
                 events: [
-                    GroupEvents(name: "event1", time: 1_720_708_600),
-                    GroupEvents(name: "event2", time: 1_790_403_500),
+//                    GroupEvents(name: "event1", time: 1_720_708_600),
+//                    GroupEvents(name: "event2", time: 1_790_403_500),
                 ]
                 
             )
@@ -487,19 +492,20 @@ struct CalendarView: View {
 }
 
 struct EventView: View {
+    @Binding var tg: TestGroup
+    var size : CGSize
     var sizing = Sizing()
     var colors = Colors()
-    @Binding var tg: TestGroup
     @State private var showAddView = false
     @State private var activeSheet: GroupCalendarSheet?
     var body: some View {
         if $tg.events.isEmpty {
             VStack {
-                Image(systemName: "tray")
-                    .bold()
-                    .foregroundStyle(.secondary)
-                    .font(.largeTitle)
-                    .padding(.bottom, 8)
+                Image("trayHang")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: sizing.x5*7)
+                    .padding(.bottom, sizing.x10)
                 Text("No Events")
                     .bold()
                 Text("Go arrange a hangout with your friends!")
@@ -593,7 +599,7 @@ struct EventView: View {
                 }
             }
         }
-    }
+    } 
 }
 
 struct MoreInfoView: View {
