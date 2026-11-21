@@ -1,7 +1,6 @@
 {
   "images" : [
     {
-      "filename" : "Hang-iOS-Default-1024@1x.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -13,7 +12,6 @@
           "value" : "dark"
         }
       ],
-      "filename" : "Hang-iOS-Dark-1024@1x.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -25,7 +23,6 @@
           "value" : "tinted"
         }
       ],
-      "filename" : "Hang-iOS-TintedLight-1024@1x.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
