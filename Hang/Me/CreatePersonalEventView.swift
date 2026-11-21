@@ -168,15 +168,16 @@ struct CreatePersonalEventView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("Cancel", systemImage: "xmark") {
                         dismiss()
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
+                    Button("Add", systemImage: "checkmark") {
                         addEvents()
                     }
-//                    .tint(.red)
+                    .buttonStyle(.glassProminent)
+                    .tint(.accent)
                     .disabled(!canSave)
                 }
             }
@@ -367,12 +368,12 @@ struct RepeatDatePickerView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("Cancel", systemImage: "xmark") {
                         dismiss()
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
+                    Button("Done", systemImage: "checkmark") {
                         selectedDates = draftDates
                         dismiss()
                     }

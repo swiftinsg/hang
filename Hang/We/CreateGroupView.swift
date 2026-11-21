@@ -91,7 +91,7 @@ struct CreateGroupView: View {
         Text(character)
             .font(.title2.bold())
             .frame(width: 30, height: 40)
-            .background(Color(.systemGray6))
+            .background(Color(.systemBackground))
             .cornerRadius(8)
     }
 

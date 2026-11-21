@@ -56,7 +56,7 @@ struct SwiftChallenge2App: App {
     var body: some Scene {
         WindowGroup {
             MainView()
-                .tint(Color("AccentColor"))
+//                .tint(Color("AccentColor"))
                 .fontDesign(.rounded)
                 // FirebaseSignInWithApple creates users/<uid> for every new account
                 .configureFirebaseSignInWithAppleWith(firestoreUserCollectionPath: Path.Firestore.Users)

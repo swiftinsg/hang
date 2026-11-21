@@ -11,7 +11,7 @@ struct JoinGroupView: View {
     @FocusState private var isFocused: Bool
 
     private var store: GroupStore { GroupStore.shared }
-
+ 
     var body: some View {
         NavigationStack {
             VStack {
@@ -91,7 +91,7 @@ struct JoinGroupView: View {
         Text(character)
             .font(.title2.bold())
             .frame(width: 30, height: 40)
-            .background(Color(.systemGray6))
+            .background(Color(.systemBackground))
             .cornerRadius(8)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
