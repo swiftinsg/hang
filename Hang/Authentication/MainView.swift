@@ -19,7 +19,7 @@ struct MainView: View {
                 AnimationView(screenType: .login)
 //                ProgressView()
             case .authenticating:
-                AnimationView(screenType: .login)
+                AnimationView(screenType: .authentication)
 //                ProgressView()
             case .notAuthenticated:
                 AuthView()

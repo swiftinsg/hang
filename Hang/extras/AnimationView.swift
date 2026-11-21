@@ -9,6 +9,7 @@ import SwiftUI
 
 public enum LoadScreen {
     case login
+    case authentication
     case loadGroup
 }
 
@@ -21,9 +22,11 @@ struct AnimationView: View {
                 .ignoresSafeArea()
             switch(screenType) {
             case .login:
-                LogAnim(size: screenSize, time: 1.5, time2: 0.3)
+                LogAnim(size: screenSize, time: 1.5, time2: 0.3, text: "Logging in")
+            case .authentication:
+                LogAnim(size: screenSize, time: 1.5, time2: 0.3, text: "Authenticating")
             case .loadGroup:
-                GroupAnim(size: screenSize, time: 0.075, time2: 0.3)
+                GroupAnim(size: screenSize, time: 0.075, time2: 0.3, text: "Loading")
             }
         }
         .onGeometryChange(for: CGSize.self) { proxy in
@@ -35,16 +38,17 @@ struct AnimationView: View {
 }
 
 #Preview {
-    AnimationView(screenType: .login)
+    AnimationView(screenType: .authentication)
 }
 
 struct LogAnim: View {
     var size: CGSize
     var time: CGFloat
     var time2: CGFloat
+    var text: String
     @State var xoff: CGFloat = .zero
     @State var rotation: CGFloat = 1
-    @State var text: String = "Logging in..."
+    @State var shownText: String = ""
     var body: some View {
         VStack {
             ZStack {
@@ -70,9 +74,9 @@ struct LogAnim: View {
                 }, delay: 0)
             }
             ZStack (alignment: .leading) {
-                Text("Logging in...")
+                Text("\(text)...")
                     .hidden()
-                Text(text)
+                Text(shownText)
                     .foregroundStyle(Color.black)
             }
             .fontDesign(.rounded)
@@ -80,9 +84,9 @@ struct LogAnim: View {
             .padding(-size.width*0.04)
             .task(id: size) {
                 await repeater(action: {
-                    await animacro(first: {text = "Logging in."}, delay: time2)
-                    await animacro(first: {text = "Logging in.."}, delay: time2)
-                    await animacro(first: {text = "Logging in..."}, delay: time2)
+                    await animacro(first: {shownText = "\(text)."}, delay: time2)
+                    await animacro(first: {shownText = "\(text).."}, delay: time2)
+                    await animacro(first: {shownText = "\(text)..."}, delay: time2)
                 }, delay: 0)
             }
         }
@@ -93,9 +97,10 @@ struct GroupAnim: View {
     var size: CGSize
     var time: CGFloat
     var time2: CGFloat
+    var text: String
     @State var state: Int = 0
     @State var selfSize: CGSize = .zero
-    @State var text: String = "Loading..."
+    @State var shownText: String = ""
     @State var frames: Array<Image> = [
         Image("groupframe1"),
         Image("groupframe2"),
@@ -125,18 +130,19 @@ struct GroupAnim: View {
                     }, delay: time)
                 }
             ZStack (alignment: .leading) {
-                Text("Loading...")
+                Text("\(text)...")
                     .hidden()
-                Text(text)
+                Text(shownText)
+                    .foregroundStyle(Color.black)
             }
             .fontDesign(.rounded)
             .font(.system(size: selfSize.width*0.15, weight: .medium))
             .padding(selfSize.height*0.05)
             .task(id: size) {
                 await repeater(action: {
-                    await animacro(first: {text = "Loading."}, delay: time2)
-                    await animacro(first: {text = "Loading.."}, delay: time2)
-                    await animacro(first: {text = "Loading..."}, delay: time2)
+                    await animacro(first: {shownText = "\(text)."}, delay: time2)
+                    await animacro(first: {shownText = "\(text).."}, delay: time2)
+                    await animacro(first: {shownText = "\(text)..."}, delay: time2)
                 }, delay: 0)
             }
             

@@ -65,6 +65,7 @@ struct PersonalCalendarView: View {
     @State private var activeSheet: PersonalCalendarSheet?
     @State private var calendarStore = PersonalCalendarStore.shared
     @State private var personalStore = PersonalEventsStore.shared
+    @State private var cellSize: CGSize = .zero
 
     // MARK: - Month grid
 
@@ -313,28 +314,12 @@ struct PersonalCalendarView: View {
         }
         let hasCalendarEvents = hasImportedEvents || hasPersonalEvents
         let hasEvents = hasCalendarEvents || hasGroupEvents
-
         return Button {
             selectedDate = date
         } label: {
             Text("\(calendar.component(.day, from: date))")
                 .font(.subheadline)
                 .frame(maxWidth: .infinity, minHeight: 45)
-                .overlay(alignment: .bottom) {
-                    if hasEvents {
-                        HStack(spacing: 2) {
-                            if hasCalendarEvents {
-                                Image(systemName: "calendar")
-                            }
-                            if hasGroupEvents {
-                                Image(systemName: "person.3")
-                            }
-                        }
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.orange)
-                        .padding(.bottom, 4)
-                    }
-                }
                 .foregroundStyle(isCurrentMonth ? .primary : .secondary)
                 .overlay {
                     // Days that already have an event.
@@ -350,7 +335,32 @@ struct PersonalCalendarView: View {
                             .strokeBorder(colors.dgreen, lineWidth: 2.5)
                     }
                 }
+                .overlay(alignment: .bottom) {
+                    if hasEvents {
+                        HStack(spacing: 2) {
+                            if hasGroupEvents {
+                                Image("flatHang")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .scaleEffect(0.7)
+                                    .offset(y: cellSize.height*0.16)
+                            } else if hasCalendarEvents {
+                                Image(systemName: "calendar")
+                            }
+                        }
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.orange)
+                        .padding(.bottom, 4)
+                    }
+                }
+
+                .onGeometryChange(for: CGSize.self) { proxy in
+                    proxy.size
+                } action: { newSize in
+                    cellSize = newSize
+                }
         }
+        
         .buttonStyle(.plain)
     }
 

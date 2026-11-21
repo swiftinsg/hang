@@ -92,10 +92,14 @@ struct GroupView: View {
             TestGroup(
                 code: "HELLO1",
                 name: "CODZEE",
+                members: [
+                    Person(name: "zi xi")
+                ],
                 events: [
                     GroupEvents(name: "event1", time: 1_720_708_600),
                     GroupEvents(name: "event2", time: 1_790_403_500),
                 ]
+                
             )
         )
     )
@@ -550,11 +554,12 @@ struct MoreInfoView: View {
         ScrollView {
             VStack {
                 Text("Invite Code")
+                    .font(.title2)
                     .fontWeight(.medium)
                     .padding(.bottom, -sizing.x1)
                 ZStack {
                     Text(tg.code)
-                        .font(.title2.bold())
+                        .font(.title.bold())
                         .padding(.horizontal, 8)
                         .frame(height: 40)
                         .background(Color(.systemGray6))
@@ -574,20 +579,22 @@ struct MoreInfoView: View {
                         .overlay(.black)
                         .padding(.vertical, sizing.x2)
                     Text("Members (\(tg.members.count))")
-                        .font(.system(size: sizing.x6, weight: .bold))
-                    ForEach(tg.members) { member in
-                        HStack {
-                            Image(systemName: "person.crop.circle")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: sizing.x10)
-                                .fontWeight(.light)
-                            VStack(alignment: .leading) {
-                                Text(member.name)
-                                    .font(.system(size: sizing.x5))
-                                Text(member.status)
-                                    .font(.system(size: sizing.x4))
-                                    .lineLimit(1)
+                        .font(.system(size: sizing.x4, weight: .bold))
+                    List{
+                        ForEach(tg.members) { member in
+                            HStack {
+                                Image(systemName: "person.crop.circle")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: sizing.x10)
+                                    .fontWeight(.light)
+                                VStack(alignment: .leading) {
+                                    Text(member.name)
+                                        .font(.system(size: sizing.x4))
+                                    Text(member.status)
+                                        .font(.system(size: sizing.x3))
+                                        .lineLimit(1)
+                                }
                             }
                         }
                     }

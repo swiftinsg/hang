@@ -6,36 +6,48 @@ struct ContentView: View {
     @StateObject private var saveManager = SaveManager()
     @State private var userName = ""
     @State private var showNamePrompt = false
-
+    
     @State private var calendarStore = PersonalCalendarStore.shared
     @State private var personalStore = PersonalEventsStore.shared
     @State private var availabilityStore = AvailabilityStore.shared
     @Environment(\.scenePhase) private var scenePhase
-
+    
     /// Groups with a saved Firestore ID. Locally created groups have an empty
     /// documentID until the create flow lands them in Firestore.
     private var groupIDs: [String] {
         GroupStore.shared.groups.map(\.documentID).filter { !$0.isEmpty }
     }
-
+    
     private var currentUID: String? {
         guard FirebaseApp.app() != nil else { return nil }
         return Auth.auth().currentUser?.uid
     }
-
+    
     init() {
         // Previews build ContentView directly and never run HangApp's init,
         // so apply the UIKit (navigation/tab bar) rounded fonts here too.
         SwiftChallenge2App.configureRoundedSystemFonts()
     }
-
+    
     var body: some View {
         TabView {
-            Tab("We", systemImage: "person.and.person.fill") {
+            Tab {
                 WeView()
+            } label: {
+                Label {
+                    Text("We")
+                } icon: {
+                    Image("MonoDoubleHang")
+                }
             }
-            Tab("Me", systemImage: "calendar") {
+            Tab {
                 MeView()
+            } label: {
+                Label {
+                    Text("Me")
+                } icon: {
+                    Image("MonoSingleHang")
+                }
             }
         }
         .tint(Color("AccentColor"))
@@ -71,9 +83,9 @@ struct ContentView: View {
             guard loaded else { return }
             // Only accounts without a username get the prompt.
             let trimmedName =
-                saveManager.profile?.username.trimmingCharacters(
-                    in: .whitespacesAndNewlines
-                ) ?? ""
+            saveManager.profile?.username.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ) ?? ""
             showNamePrompt = trimmedName.isEmpty
             if !trimmedName.isEmpty {
                 Task { await GroupStore.shared.refreshMyDisplayName() }
@@ -94,7 +106,7 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) {}
         }
     }
-
+    
     /// Publishes anonymous busy intervals to every group this account belongs
     /// to. Event titles never enter this path.
     private func publishAvailability(to ids: [String], force: Bool = false) async {
