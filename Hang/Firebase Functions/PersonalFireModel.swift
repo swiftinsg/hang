@@ -11,6 +11,33 @@ import FirebaseFirestore
 struct ProfileData: Identifiable, Codable {
     @DocumentID var id: String?
     var username: String
+    /// Account-wide reminder choice. Stored on the user document so it follows
+    /// the account to every device. Older documents default to no reminders.
+    var reminderPreference: ReminderPreference = .none
+
+    init(username: String, reminderPreference: ReminderPreference = .none) {
+        self.username = username
+        self.reminderPreference = reminderPreference
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        username = try container.decode(String.self, forKey: .username)
+        reminderPreference = try container.decodeIfPresent(
+            ReminderPreference.self,
+            forKey: .reminderPreference
+        ) ?? .none
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(username, forKey: .username)
+        try container.encode(reminderPreference, forKey: .reminderPreference)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, username, reminderPreference
+    }
 }
 
 /// One entry in the signed-in user's personal calendar, stored at

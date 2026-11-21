@@ -122,6 +122,9 @@ final class GroupStore {
         let groupDocument = groupsCollection.document()
         let uid = userDocument.documentID
         let username = await currentUsername()
+        guard !AccountDeletionController.shared.isDeleting else {
+            throw GroupStoreError.accountDeletionInProgress
+        }
 
         let data = GroupData(
             inviteCode: code,
@@ -169,6 +172,9 @@ final class GroupStore {
 
         let uid = userDocument.documentID
         let username = await currentUsername()
+        guard !AccountDeletionController.shared.isDeleting else {
+            throw GroupStoreError.accountDeletionInProgress
+        }
 
         var groupUpdate: [String: Any] = [
             "people": FieldValue.arrayUnion([userDocument])
@@ -379,6 +385,9 @@ final class GroupStore {
                 forDocument: groupsCollection.document(id)
             )
         }
+        // The profile read above can finish after account deletion has begun.
+        // Do not let that older operation recreate membership data afterward.
+        guard !AccountDeletionController.shared.isDeleting else { return }
         try? await batch.commit()
     }
 
@@ -401,6 +410,7 @@ enum GroupStoreError: LocalizedError {
     case notSignedIn
     case groupNotFound
     case groupNotSaved
+    case accountDeletionInProgress
 
     var errorDescription: String? {
         switch self {
@@ -410,6 +420,8 @@ enum GroupStoreError: LocalizedError {
             return "Group not found. Please double-check the entered group code."
         case .groupNotSaved:
             return "This group isn't saved to Firestore yet."
+        case .accountDeletionInProgress:
+            return "Account deletion is in progress."
         }
     }
 }

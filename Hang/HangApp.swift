@@ -14,6 +14,8 @@ struct SwiftChallenge2App: App {
     init() {
         FirebaseApp.configure()
         print("configured Firebase")
+        // Present notifications even when the app is in the foreground.
+        ReminderScheduler.shared.configure()
         Self.configureRoundedSystemFonts()
     }
 
