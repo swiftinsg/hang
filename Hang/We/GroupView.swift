@@ -586,7 +586,8 @@ struct MoreInfoView: View {
 
             Section("Description") {
                 Text(tg.desc)
-                Button("Edit", systemImage: "pencil") {}
+                Button("Edit description", systemImage: "pencil") {}
+                    .foregroundStyle(Color(.accent))
             }
             .listRowBackground(Color(.systemGray6))
 

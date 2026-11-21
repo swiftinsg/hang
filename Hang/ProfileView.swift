@@ -5,14 +5,16 @@
 //  Created by Lim Shi Hui Serene on 13/11/26.
 //
 
-import SwiftUI
 import FirebaseSignInWithApple
+import SwiftUI
 
 struct ProfileView: View {
     @Environment(\.firebaseSignInWithApple) private var firebaseSignInWithApple
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var saveManager = SaveManager()
+    @State private var accountDeletion = AccountDeletionController.shared
     @State private var showingAlert = false
+    @State private var showingDeleteAlert = false
     @State private var permission: ReminderPermission = .notDetermined
 
     private var selectedReminder: ReminderPreference {
@@ -43,15 +45,19 @@ struct ProfileView: View {
                     }
                 }
 
-                Text("Hang will notify you this long before every event — personal, group and device calendar events. Saved to your account, so you can change it any time.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "Hang will notify you this long before every event — personal, group and device calendar events. Saved to your account, so you can change it any time."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
                 if selectedReminder != .none && permission != .granted {
                     if permission == .denied {
-                        Text("Notifications are turned off in Settings. Enable them to get reminders.")
-                            .font(.caption)
-                            .foregroundStyle(.red)
+                        Text(
+                            "Notifications are turned off in Settings. Enable them to get reminders."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.red)
                     } else {
                         Button("Enable Notifications") {
                             Task { await requestNotifications() }
@@ -61,15 +67,30 @@ struct ProfileView: View {
             }
 
             Section {
-                Button {
+                Button(
+                    "Sign Out",
+                    systemImage: "rectangle.portrait.and.arrow.right",
+                    role: .destructive
+                ) {
                     showingAlert = true
-                } label: {
-                    Label(
-                        "Sign Out",
-                        systemImage: "rectangle.portrait.and.arrow.right"
-                    )
-                    .foregroundStyle(.red)
                 }
+                .foregroundStyle(.red)
+                .disabled(accountDeletion.isDeleting)
+
+                Button(role: .destructive) {
+                    showingDeleteAlert = true
+                } label: {
+                    HStack {
+                        Label("Delete Account", systemImage: "trash")
+                        if accountDeletion.isDeleting {
+                            Spacer()
+                            ProgressView()
+                        }
+                    }
+                }
+                .bold()
+                .foregroundStyle(.red)
+                .disabled(accountDeletion.isDeleting)
             }
         }
         .navigationTitle("Profile")
@@ -91,6 +112,27 @@ struct ProfileView: View {
                 },
                 secondaryButton: .cancel()
             )
+        }
+        .alert("Delete Account?", isPresented: $showingDeleteAlert) {
+            Button("Delete", role: .destructive) {
+                Task { await accountDeletion.deleteAccount() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "This permanently deletes your profile, personal Hang events and shared availability, and removes you from all groups. Shared group events are not deleted. You'll be asked to confirm with Sign in with Apple. This can't be undone."
+            )
+        }
+        .alert(
+            "Couldn't Delete Account",
+            isPresented: Binding(
+                get: { accountDeletion.errorMessage != nil },
+                set: { if !$0 { accountDeletion.errorMessage = nil } }
+            )
+        ) {
+            Button("OK") { accountDeletion.errorMessage = nil }
+        } message: {
+            Text(accountDeletion.errorMessage ?? "Please try again.")
         }
     }
 

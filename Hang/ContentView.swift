@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var calendarStore = PersonalCalendarStore.shared
     @State private var personalStore = PersonalEventsStore.shared
     @State private var availabilityStore = AvailabilityStore.shared
+    @State private var accountDeletion = AccountDeletionController.shared
     @Environment(\.scenePhase) private var scenePhase
 
     /// Groups with a saved Firestore ID. Locally created groups have an empty
@@ -77,8 +78,21 @@ struct ContentView: View {
                 MeView()
             }
         }
+        .disabled(accountDeletion.isDeleting)
         .tint(Color("AccentColor"))
         .fontDesign(.rounded)
+        .overlay {
+            if accountDeletion.isDeleting {
+                ZStack {
+                    Color(.systemBackground)
+                        .opacity(0.85)
+                        .ignoresSafeArea()
+                    ProgressView("Deleting Account…")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea()
+            }
+        }
         .onAppear {
             saveManager.loadProfile()
             // Keep the personal calendar in sync with the signed-in account.

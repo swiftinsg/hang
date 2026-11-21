@@ -45,6 +45,8 @@ final class AvailabilityPublisher {
 
     @ObservationIgnored private var lastPublish: [String: Date] = [:]
     @ObservationIgnored private var inFlight: Set<String> = []
+    @ObservationIgnored private var isPaused = false
+    @ObservationIgnored private var pendingAfterResume: Set<String> = []
 
     // MARK: - Payload
 
@@ -109,6 +111,10 @@ final class AvailabilityPublisher {
     /// and none of the three can carry an event title.
     func publish(to groupID: String, uid: String) async throws {
         guard !groupID.isEmpty else { return }
+        if isPaused {
+            pendingAfterResume.insert(groupID)
+            return
+        }
         guard !inFlight.contains(groupID) else { return }
         inFlight.insert(groupID)
         defer { inFlight.remove(groupID) }
@@ -147,8 +153,35 @@ final class AvailabilityPublisher {
         lastPublish[groupID] = nil
     }
 
+    /// Prevents availability writes while account deletion removes them.
+    func pausePublishing() {
+        isPaused = true
+    }
+
+    /// Resumes writes and returns groups that changed while paused. The caller
+    /// can refresh those after a cancelled/failed deletion, or discard them
+    /// after the account has been deleted.
+    @discardableResult
+    func resumePublishing() -> [String] {
+        isPaused = false
+        defer { pendingAfterResume.removeAll() }
+        return pendingAfterResume.sorted()
+    }
+
+    /// Waits for uploads that were already running when publishing was paused.
+    func waitForPendingPublishes() async {
+        while !inFlight.isEmpty {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
     /// Publishes to every group that is due for a refresh.
     func refresh(groups: [String], uid: String, force: Bool = false) async {
+        if isPaused {
+            pendingAfterResume.formUnion(groups)
+            return
+        }
+
         for groupID in groups {
             if !force,
                let last = lastPublish[groupID],
