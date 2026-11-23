@@ -18,7 +18,7 @@ struct AnimationView: View {
     @State var screenSize: CGSize = .zero
     var body: some View {
         ZStack {
-            Color(red: 0.9, green: 1, blue: 0.95, opacity: 1)
+            Color(.clear)
                 .ignoresSafeArea()
             switch(screenType) {
             case .login:
@@ -77,7 +77,7 @@ struct LogAnim: View {
                 Text("\(text)...")
                     .hidden()
                 Text(shownText)
-                    .foregroundStyle(Color.black)
+                    .foregroundStyle(.primary)
             }
             .fontDesign(.rounded)
             .font(.system(size: size.width*0.06, weight: .medium))

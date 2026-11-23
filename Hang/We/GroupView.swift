@@ -120,7 +120,7 @@ struct CalendarView: View {
         calendar.firstWeekday = 2
         return calendar
     }()
-
+    @State private var cellSize: CGSize = .zero
     @State private var displayedMonth: Date = Date()
     @State private var selectedDate: Date? = Date()
     @State private var activeSheet: GroupCalendarSheet?
@@ -416,15 +416,29 @@ struct CalendarView: View {
                     }
                 }
                 .overlay(alignment: .bottom) {
-                    if hasGroupEvents {
-                        Image(systemName: "person.3")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.orange)
-                            .padding(.bottom, 4)
+                    HStack(spacing: 2) {
+                        if hasGroupEvents {
+                            Image("flatTripleHang")
+                                .resizable()
+                                .scaledToFit()
+                                .scaleEffect(0.9)
+                                .offset(y: cellSize.height*0.18)
+                        }
                     }
                 }
                 .overlay {
                     // Most available days of the month.
+                    if isTopAvailable {
+                        Image("topAvailableHang")
+                            .resizable()
+                            .scaledToFit()
+                            .scaleEffect(0.5)
+                            .offset(y: cellSize.height*0.3)
+                            .offset(x: cellSize.height*4)
+
+                    }
+                }
+                .overlay {
                     if isTopAvailable {
                         RoundedRectangle(cornerRadius: 8)
                             .strokeBorder(
@@ -436,12 +450,12 @@ struct CalendarView: View {
                             )
                     }
                 }
+                
                 .overlay {
                     // Days that already have an event.
                     if hasGroupEvents {
                         RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Color.orange, lineWidth: 2)
-                            .padding(2)
+                            .strokeBorder(Color.blue, lineWidth: 2)
                     }
                 }
                 .overlay {
@@ -500,12 +514,13 @@ struct NewGroupEventButton: View {
     var action: () -> Void
 
     var body: some View {
-        Button("New event", systemImage: "plus", action: action)
+        Button("", systemImage: "plus", action: action)
             .font(.title2.weight(.semibold))
             .buttonStyle(.glassProminent)
             .controlSize(.large)
             .tint(colors.dgreen)
             .padding(.horizontal, 32)
+            .buttonBorderShape(.circle)
     }
 }
 

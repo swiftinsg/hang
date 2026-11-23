@@ -362,7 +362,7 @@ struct PersonalCalendarView: View {
                                 Image("flatTripleHang")
                                     .resizable()
                                     .scaledToFit()
-                                    .scaleEffect(0.8)
+                                    .scaleEffect(0.9)
                                     .offset(y: cellSize.height*0.18)
                             } else if hasCalendarEvents {
                                 Image("flatHang")
@@ -402,12 +402,12 @@ struct PersonalCalendarView: View {
         } label: {
             Image(systemName: "plus")
                 .font(.title2.weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(width: 60, height: 60)
-                .background(colors.dgreen, in: Circle())
-                .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+                .padding(5)
         }
-        .padding(20)
-        .accessibilityLabel("New event")
+        .buttonStyle(.glassProminent)
+        .controlSize(.large)
+        .tint(colors.dgreen)
+        .padding(.horizontal, 32)
+        .buttonBorderShape(.circle)
     }
 }
