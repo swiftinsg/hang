@@ -109,6 +109,12 @@ public struct Person: Hashable, Identifiable {
     public var id: String { uid }
     var name: String
     var status: String = "Add description here..."
+    /// The member's chosen avatar. `.initial` falls back to the first letter of
+    /// `avatarName` (or `name`) instead of showing an image.
+    var profilePicture: ProfilePicture = .initial
+    /// Username used for the fallback initial when the visible name is generic,
+    /// e.g. "You" for the signed-in user in a shared calendar.
+    var avatarName: String? = nil
 }
 
 public enum clickStyle {

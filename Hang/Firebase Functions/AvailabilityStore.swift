@@ -88,6 +88,30 @@ final class AvailabilityStore {
         byGroup = [:]
     }
 
+    /// Forces a fresh read for pull-to-refresh. Live listeners stay in place,
+    /// so later updates still arrive without another manual refresh.
+    func refresh() async {
+        for groupID in Array(listeners.keys) {
+            do {
+                let snapshot = try await db
+                    .collection(Path.Firestore.Groups)
+                    .document(groupID)
+                    .collection(Path.Firestore.Availability)
+                    .getDocuments()
+
+                var members: [String: MemberAvailability] = [:]
+                for document in snapshot.documents {
+                    members[document.documentID] = Self.decode(document)
+                }
+
+                byGroup[groupID] = members
+                errorMessage = nil
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
     // MARK: - Reading
 
     /// What `AvailabilityCalculator.sharedBusy` wants.

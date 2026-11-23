@@ -1,14 +1,16 @@
 rules_version = '2';
 
-// Hang — Firestore security rules.
+// Hang — Firestore security rules (hardened).
 //
-// The privacy promise is "groups see WHEN you are busy, never WHY". It is
-// enforced here as well as in the client: an availability document has a
-// closed top-level schema with no field that could hold a title, note,
-// location, calendar name or event id. Nobody outside the group can read it.
+// The privacy promise is "groups see WHEN you are busy, never WHY". The
+// availability subcollection remains the enforcement point, but group documents
+// are no longer writable by every signed-in user: otherwise anyone could add
+// themselves to a group and unlock every member's busy intervals.
 //
-// The rest of the rules preserve the app's current groups/users schema and
-// access behavior; only the availability subcollection is newly restricted.
+// Group `list` reads stay open because invite-code lookup happens before a
+// user is a member, and account deletion scans groups for stale identity data.
+// Rules v2 cannot inspect query WHERE clauses, so this cannot be narrowed
+// further without a separate invite-code index / Admin SDK migration.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -17,19 +19,170 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function selfRef() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
     // `groups/{groupID}.people` holds references to `users/<uid>` documents.
     function isGroupMember(groupID) {
       return signedIn()
         && get(/databases/$(database)/documents/groups/$(groupID))
              .data.people
-             .hasAny([/databases/$(database)/documents/users/$(request.auth.uid)]);
+             .hasAny([selfRef()]);
+    }
+
+    // ------------------------------------------------- group-document helpers
+
+    function hasGroupBasics(data) {
+      return data.keys().hasAll(['inviteCode', 'name', 'desc', 'people'])
+        && data.inviteCode is string
+        && data.inviteCode.size() > 0
+        && data.inviteCode.size() <= 32
+        && data.name is string
+        && data.desc is string
+        && data.people is list;
+    }
+
+    function scalarGroupFieldsUnchanged(before, after) {
+      return after.inviteCode == before.inviteCode
+        && after.name == before.name
+        && after.desc == before.desc
+        && after.keys().hasOnly(
+             ['inviteCode', 'name', 'desc', 'people',
+              'memberNames', 'memberProfilePictures']
+           )
+        && before.keys().hasOnly(
+             ['inviteCode', 'name', 'desc', 'people',
+              'memberNames', 'memberProfilePictures']
+           );
+    }
+
+    function onlyOwnMapKeysChanged(afterMap, beforeMap, uid) {
+      return afterMap.diff(beforeMap).affectedKeys().hasOnly([uid]);
+    }
+
+    function onlyOwnMapKeysRemoved(afterMap, beforeMap, uid) {
+      let changes = afterMap.diff(beforeMap);
+      return changes.affectedKeys().hasOnly([uid])
+        && changes.addedKeys().size() == 0
+        && changes.changedKeys().size() == 0;
+    }
+
+    function validNewGroup() {
+      let data = request.resource.data;
+      return hasGroupBasics(data)
+        && data.keys().hasOnly(
+             ['inviteCode', 'name', 'desc', 'people',
+              'memberNames', 'memberProfilePictures']
+           )
+        && data.people == [selfRef()]
+        && data.get('memberNames', {}).keys().hasOnly([request.auth.uid])
+        && data.get('memberProfilePictures', {}).keys().hasOnly([request.auth.uid]);
+    }
+
+    // A non-member may join by adding only themselves and only their own
+    // name/avatar entries (GroupStore.joinGroup).
+    function validJoin() {
+      let before = resource.data;
+      let after = request.resource.data;
+      let self = selfRef();
+      return hasGroupBasics(before)
+        && hasGroupBasics(after)
+        && scalarGroupFieldsUnchanged(before, after)
+        && !before.people.hasAny([self])
+        && after.people.hasAny([self])
+        && after.people.hasAll(before.people)
+        && after.people.size() == before.people.size() + 1
+        && onlyOwnMapKeysChanged(
+             after.get('memberNames', {}),
+             before.get('memberNames', {}),
+             request.auth.uid)
+        && onlyOwnMapKeysChanged(
+             after.get('memberProfilePictures', {}),
+             before.get('memberProfilePictures', {}),
+             request.auth.uid);
+    }
+
+    // Leaving: remove only yourself and optionally erase only your own entries.
+    function validSelfExit() {
+      let before = resource.data;
+      let after = request.resource.data;
+      let self = selfRef();
+      return hasGroupBasics(before)
+        && hasGroupBasics(after)
+        && scalarGroupFieldsUnchanged(before, after)
+        && before.people.hasAny([self])
+        && !after.people.hasAny([self])
+        && before.people.hasAll(after.people)
+        && before.people.size() == after.people.size() + 1
+        && onlyOwnMapKeysChanged(
+             after.get('memberNames', {}),
+             before.get('memberNames', {}),
+             request.auth.uid)
+        && onlyOwnMapKeysChanged(
+             after.get('memberProfilePictures', {}),
+             before.get('memberProfilePictures', {}),
+             request.auth.uid);
+    }
+
+    // A current member refreshing their own copied name/avatar.
+    function validMemberProfileRefresh() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return hasGroupBasics(before)
+        && hasGroupBasics(after)
+        && scalarGroupFieldsUnchanged(before, after)
+        && after.people == before.people
+        && onlyOwnMapKeysChanged(
+             after.get('memberNames', {}),
+             before.get('memberNames', {}),
+             request.auth.uid)
+        && onlyOwnMapKeysChanged(
+             after.get('memberProfilePictures', {}),
+             before.get('memberProfilePictures', {}),
+             request.auth.uid);
+    }
+
+    // Account deletion may erase only the caller's stale entries from groups
+    // they are no longer in (AccountDeletionController).
+    function validStaleSelfCleanup() {
+      let before = resource.data;
+      let after = request.resource.data;
+      let self = selfRef();
+      return hasGroupBasics(before)
+        && hasGroupBasics(after)
+        && scalarGroupFieldsUnchanged(before, after)
+        && after.people == before.people
+        && !before.people.hasAny([self])
+        && onlyOwnMapKeysRemoved(
+             after.get('memberNames', {}),
+             before.get('memberNames', {}),
+             request.auth.uid)
+        && onlyOwnMapKeysRemoved(
+             after.get('memberProfilePictures', {}),
+             before.get('memberProfilePictures', {}),
+             request.auth.uid);
+    }
+
+    function validEventPayload() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['name', 'desc', 'location', 'time', 'endTime'])
+        && data.name is string
+        && data.name.size() <= 200
+        && data.desc is string
+        && data.desc.size() <= 2000
+        && data.get('location', '') is string
+        && data.time is timestamp
+        && (!data.keys().hasAny(['endTime']) || data.endTime is timestamp);
     }
 
     // --------------------------------------------------------------- profiles
     match /users/{uid} {
-      allow read, write: if signedIn() && request.auth.uid == uid;
+      // No client flow reads another user's document. Names and avatars are
+      // copied into group documents instead.
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update, delete: if signedIn() && request.auth.uid == uid;
 
-      // Personal events created in the Me tab stay under the owner's account.
       match /calendar/{eventID} {
         allow read, write: if signedIn() && request.auth.uid == uid;
       }
@@ -37,16 +190,32 @@ service cloud.firestore {
 
     // ----------------------------------------------------------------- groups
     match /groups/{groupID} {
-      // Signed-in lookup by invite code and listing your own groups both rely
-      // on reads here. Tightening these is a separate task; the availability
-      // subcollection below is restricted independently.
-      allow read: if signedIn();
-      allow write: if signedIn();
+      // Direct reads by document ID are member-only. No current client flow
+      // reads a group document directly; rule-level get() calls are unaffected.
+      allow get: if signedIn() && isGroupMember(groupID);
 
-      // Group events are shared with the whole group by design (their names
-      // are meant to be seen), unlike personal availability.
+      // Invite-code lookup and deletion cleanup need unscoped list queries.
+      allow list: if signedIn();
+
+      allow create: if signedIn() && validNewGroup();
+
+      // Non-member branches come first so a join is never blocked by the
+      // member-only get() inside isGroupMember().
+      allow update: if signedIn() && (
+        validJoin()
+        || validSelfExit()
+        || validStaleSelfCleanup()
+        || (isGroupMember(groupID) && validMemberProfileRefresh())
+      );
+
+      // Groups are shared history; no client flow deletes a group document.
+      allow delete: if false;
+
+      // Group events are shared with the whole group by design.
       match /events/{eventID} {
-        allow read, write: if signedIn();
+        allow read: if isGroupMember(groupID);
+        allow create, update: if isGroupMember(groupID) && validEventPayload();
+        allow delete: if isGroupMember(groupID);
       }
 
       // --------------------------------------------------------- availability
@@ -54,16 +223,14 @@ service cloud.firestore {
       // THE PRIVACY BOUNDARY.
       //
       // Exactly three top-level fields are allowed, and none can carry an
-      // event name. `days` is capped at 40 entries (about a month of busy
-      // time) so a document can never become a calendar dump.
-      //
-      // Rules cannot iterate a list, so the contents of each day entry cannot
-      // be type-checked here. The client decodes only `date` and the number
-      // pairs in `intervals`; extra keys inside `days` are ignored.
+      // event name. `days` is capped at 40 entries. Rules cannot iterate lists,
+      // so day-entry contents remain unvalidated by rules; the client ignores
+      // extra keys. Closing that gap fully needs an Admin SDK Cloud Function.
       match /availability/{uid} {
         function validPayload() {
           let data = request.resource.data;
-          return data.keys().hasOnly(['timezoneIdentifier', 'updatedAt', 'days'])
+          return data.keys().hasAll(['timezoneIdentifier', 'updatedAt', 'days'])
+            && data.keys().hasOnly(['timezoneIdentifier', 'updatedAt', 'days'])
             && data.timezoneIdentifier is string
             && data.timezoneIdentifier.size() > 0
             && data.timezoneIdentifier.size() <= 64
@@ -72,18 +239,14 @@ service cloud.firestore {
             && data.days.size() <= 40;
         }
 
-        // Only members of this group may see when you are busy.
         allow read: if isGroupMember(groupID);
 
-        // You can only publish your own busy times, and only while you belong
-        // to the group.
         allow create, update: if signedIn()
           && request.auth.uid == uid
           && isGroupMember(groupID)
           && validPayload();
 
-        // Turning sharing off, or leaving, deletes the document. Deletion is
-        // allowed by uid alone so it still works after membership is removed.
+        // Works after leaving / during account deletion.
         allow delete: if signedIn() && request.auth.uid == uid;
       }
     }

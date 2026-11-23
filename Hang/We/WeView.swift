@@ -8,7 +8,7 @@ struct WeView: View {
     @State private var store = GroupStore.shared
     @State var showingCreateSheet = false
     @State var showingJoinSheet = false
-    
+
     var results: [TestGroup] {
         var filtered = store.groups
         if !searchQuery.isEmpty {
@@ -21,25 +21,27 @@ struct WeView: View {
         }
         return filtered
     }
-    
+
     let columns = [
         GridItem(.adaptive(minimum: 150))
     ]
     @FocusState var isFocused: Bool
-    
+
     var body: some View {
         @Bindable var store = store
-        
+
         NavigationStack {
             ScrollView {
                 VStack {
                     LazyVGrid(columns: columns, spacing: sizing.x1) {
                         ForEach(results) { tg in
-                            if let index = store.groups.firstIndex(where: { $0.id == tg.id }) {
+                            if let index = store.groups.firstIndex(where: {
+                                $0.id == tg.id
+                            }) {
                                 NavigationLink {
                                     GroupView(tg: $store.groups[index])
                                 } label: {
-                                    GroupCard(tg: tg)
+                                    GroupCard(tg: tg, members: tg.members)
                                 }
                                 .buttonStyle(setStyle(styleName: .Shrink2))
                             }
@@ -52,6 +54,9 @@ struct WeView: View {
                         placement: .navigationBarDrawer(displayMode: .always)
                     )
                 }
+            }
+            .refreshable {
+                await AppReloader.reloadAll()
             }
             .sheet(isPresented: $showingCreateSheet) {
                 CreateGroupView()
@@ -90,14 +95,17 @@ struct GroupCard: View {
     var sizing = Sizing()
     var colors = Colors()
     let tg: TestGroup
+    let members: [Person]
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color(
-                    red: Double.random(in: 0.35...0.45),
-                    green: Double.random(in: 0.6...0.7),
-                    blue: Double.random(in: 0.4...0.5)
-                ))
+                .fill(
+                    Color(
+                        red: Double.random(in: 0.35...0.45),
+                        green: Double.random(in: 0.6...0.7),
+                        blue: Double.random(in: 0.4...0.5)
+                    )
+                )
                 .aspectRatio(1, contentMode: .fit)
             VStack(alignment: .leading, spacing: 16) {
                 Text(tg.name)
@@ -114,13 +122,11 @@ struct GroupCard: View {
                 }
                 HStack(spacing: -8) {
                     ForEach(Array(tg.members.prefix(5))) { member in
-                        Circle()
-                            .foregroundStyle(Color(
-                                red: Double.random(in: 0.1...0.8),
-                                green: Double.random(in: 0.1...0.8),
-                                blue: Double.random(in: 0.1...0.8)
-                            ))
-                            .frame(width: 32)
+                            ProfileAvatarView(person: member, size: 32)
+                            .background(
+                                Color(red: 234 / 255, green: 236 / 255, blue: 242 / 255)
+                            )
+                        .clipShape(.circle)
                     }
                 }
             }
@@ -134,3 +140,5 @@ struct GroupCard: View {
 #Preview {
     WeView()
 }
+
+

@@ -260,6 +260,9 @@ struct CalendarView: View {
             }
             .padding(15)
         }
+        .refreshable {
+            await AppReloader.reloadAll()
+        }
         .overlay(alignment: .bottomTrailing) {
             createEventButton
         }
@@ -667,21 +670,17 @@ struct MoreInfoView: View {
             }
             .listRowBackground(Color(.secondarySystemBackground))
 
-            Section("Description") {
-                Text(tg.desc)
-                Button("Edit description", systemImage: "pencil") {}
-                    .foregroundStyle(Color(.accent))
-            }
-            .listRowBackground(Color(.secondarySystemBackground))
+//            Section("Description") {
+//                Text(tg.desc)
+//                Button("Edit description", systemImage: "pencil") {}
+//                    .foregroundStyle(Color(.accent))
+//            }
+//            .listRowBackground(Color(.secondarySystemBackground))
 
             Section("Members (\(tg.members.count))") {
                 ForEach(tg.members) { member in
                     HStack(spacing: 16) {
-                        Image(systemName: "person.crop.circle")  // TODO: pfp
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: sizing.x8)
-                            .foregroundStyle(.green)
+                        ProfileAvatarView(person: member, size: sizing.x8)
                         VStack(alignment: .leading) {
                             Text(member.name)
                                 .lineLimit(1)

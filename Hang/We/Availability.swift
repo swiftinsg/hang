@@ -42,14 +42,20 @@ extension Person {
     }
 
     /// Stable per-member colour used for avatars and busy blocks. Derived from
-    /// the display name only so it stays the same across launches.
+    /// the uid so it stays the same across launches, devices and views (the
+    /// Profile preview uses this too). FNV-1a spreads different uids across the
+    /// palette better than a simple character sum while staying deterministic.
     var tint: Color {
         let palette: [Color] = [
             .teal, .indigo, .orange, .pink, .purple, .blue, .mint,
         ]
         let seedSource = uid.isEmpty ? name : uid
-        let colorSeed = seedSource.unicodeScalars.reduce(0) { $0 + Int($1.value) }
-        return palette[colorSeed % palette.count]
+        var hash: UInt32 = 2166136261
+        for byte in seedSource.utf8 {
+            hash ^= UInt32(byte)
+            hash = hash &* 16777619
+        }
+        return palette[Int(hash % UInt32(palette.count))]
     }
 }
 

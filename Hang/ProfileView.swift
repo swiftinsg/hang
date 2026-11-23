@@ -9,6 +9,7 @@ import FirebaseSignInWithApple
 import SwiftUI
 
 struct ProfileView: View {
+    @State private var profile = false
     @Environment(\.firebaseSignInWithApple) private var firebaseSignInWithApple
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var saveManager = SaveManager()
@@ -21,79 +22,154 @@ struct ProfileView: View {
         saveManager.profile?.reminderPreference ?? .none
     }
 
+    private var selectedPicture: ProfilePicture {
+        saveManager.profile?.profilePicture ?? .initial
+    }
+
+    private var username: String {
+        saveManager.profile?.username ?? ""
+    }
+
+    /// Same deterministic colour the group views use for this member's initial
+    /// avatar, so the preview here matches what everyone else sees.
+    private var avatarTint: Color {
+        Person.currentUser.tint
+    }
+
+    /// The five premade pictures. "original" is shown as its own button above
+    /// the loop so it always appears first.
+    private var selectablePictures: [ProfilePicture] {
+        ProfilePicture.allCases.filter { $0 != .initial }
+    }
+
     var body: some View {
-        Form {
-            Section("Account") {
-                HStack {
-                    Text("Username")
-                    Spacer()
-                    Text(saveManager.profile?.username ?? "Loading…")
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section("Reminders") {
-                Picker(
-                    "All events",
-                    selection: Binding(
-                        get: { selectedReminder },
-                        set: { updateReminderPreference($0) }
-                    )
-                ) {
-                    ForEach(ReminderPreference.allCases) { preference in
-                        Text(preference.title).tag(preference)
-                    }
-                }
-
-                Text(
-                    "Hang will send a notification this long before every group hangout."
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-                if selectedReminder != .none && permission != .granted {
-                    if permission == .denied {
-                        Text(
-                            "Notifications are turned off in Settings. Enable them to get reminders."
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                    } else {
-                        Button("Enable Notifications") {
-                            Task { await requestNotifications() }
-                        }
-                    }
-                }
-            }
-
-            Section {
-                Button(
-                    "Sign Out",
-                    systemImage: "rectangle.portrait.and.arrow.right",
-                    role: .destructive
-                ) {
-                    showingAlert = true
-                }
-                .foregroundStyle(.red)
-                .disabled(accountDeletion.isDeleting)
-
-                Button(role: .destructive) {
-                    showingDeleteAlert = true
+        VStack {
+            Menu {
+                Button {
+                    updateProfilePicture(.initial)
                 } label: {
+                    Text("original")
+                }
+                Divider()
+                ForEach(selectablePictures) { picture in
+                    Button {
+                        updateProfilePicture(picture)
+                    } label: {
+                        VStack(spacing: 6) {
+                            ProfileAvatarView(
+                                profilePicture: picture,
+                                name: username,
+                                size: 48,
+                                tint: avatarTint
+                            )
+                            Text(picture.title)
+                                .font(.caption2)
+                                .lineLimit(1)
+                                .foregroundStyle(
+                                    picture == selectedPicture
+                                        ? .primary : .secondary
+                                )
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(
+                            picture == selectedPicture
+                                ? Color.accentColor.opacity(0.12)
+                                : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 10)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(picture.title)
+                    .accessibilityAddTraits(
+                        picture == selectedPicture ? [.isSelected] : []
+                    )
+                }
+
+            } label: {
+                ProfileAvatarView(
+                    profilePicture: selectedPicture,
+                    name: username,
+                    size: 100,
+                    tint: avatarTint
+                )
+            }
+            .padding(2)
+            Form {
+                Section {
                     HStack {
-                        Label("Delete Account", systemImage: "trash")
-                        if accountDeletion.isDeleting {
-                            Spacer()
-                            ProgressView()
+                        Text("Username")
+                        Spacer()
+                        Text(saveManager.profile?.username ?? "Loading…")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Section("Reminders") {
+                    Picker(
+                        "All events",
+                        selection: Binding(
+                            get: { selectedReminder },
+                            set: { updateReminderPreference($0) }
+                        )
+                    ) {
+                        ForEach(ReminderPreference.allCases) { preference in
+                            Text(preference.title).tag(preference)
+                        }
+                    }
+
+                    Text(
+                        "Hang will send a notification this long before every group hangout."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                    if selectedReminder != .none && permission != .granted {
+                        if permission == .denied {
+                            Text(
+                                "Notifications are turned off in Settings. Enable them to get reminders."
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                        } else {
+                            Button("Enable Notifications") {
+                                Task { await requestNotifications() }
+                            }
                         }
                     }
                 }
-                .bold()
-                .foregroundStyle(.red)
-                .disabled(accountDeletion.isDeleting)
+
+                Section {
+                    Button(
+                        "Sign Out",
+                        systemImage: "rectangle.portrait.and.arrow.right",
+                        role: .destructive
+                    ) {
+                        showingAlert = true
+                    }
+                    .foregroundStyle(.red)
+                    .disabled(accountDeletion.isDeleting)
+
+                    Button(role: .destructive) {
+                        showingDeleteAlert = true
+                    } label: {
+                        HStack {
+                            Label("Delete Account", systemImage: "trash")
+                            if accountDeletion.isDeleting {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .bold()
+                    .foregroundStyle(.red)
+                    .disabled(accountDeletion.isDeleting)
+                }
             }
         }
+        .background(Color(.systemGroupedBackground))
         .navigationTitle("Profile")
+        .navigationBarTitleDisplayMode(.inline)
         .task {
             saveManager.loadProfile()
             await refreshPermission()
@@ -134,6 +210,13 @@ struct ProfileView: View {
         } message: {
             Text(accountDeletion.errorMessage ?? "Please try again.")
         }
+    }
+
+    private func updateProfilePicture(_ picture: ProfilePicture) {
+        saveManager.saveProfilePicture(picture)
+        // Groups keep their own copy of the avatar so every member can see it
+        // without reading another account's private profile document.
+        Task { await GroupStore.shared.refreshMyProfile(picture: picture) }
     }
 
     private func updateReminderPreference(_ preference: ReminderPreference) {

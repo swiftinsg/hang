@@ -27,12 +27,10 @@ class SaveManager: ObservableObject {
     // Create / update the signed-in user's own profile
     func saveUsername(_ username: String) {
         guard let profileDocument else { return }
-        do {
-            // merge: true keeps the userId field written by FirebaseSignInWithApple
-            try profileDocument.setData(from: ProfileData(username: username), merge: true)
-        } catch {
-            print("Error saving profile: \(error)")
-        }
+        // Write only the username so a later name change can't reset the
+        // reminder preference or the chosen profile picture.
+        profileDocument.setData(["username": username], merge: true)
+        profile?.username = username
     }
     
     /// Saves the signed-in user's choice of reminder for all their events.
@@ -46,14 +44,18 @@ class SaveManager: ObservableObject {
         profile?.reminderPreference = preference
     }
 
-    func saveEvents(_ username: String) {
+    /// Saves the avatar shown to other group members and in shared calendars.
+    func saveProfilePicture(_ picture: ProfilePicture) {
         guard let profileDocument else { return }
-        do {
-            // merge: true keeps the userId field written by FirebaseSignInWithApple
-            try profileDocument.setData(from: ProfileData(username: username), merge: true)
-        } catch {
-            print("Error saving profile: \(error)")
-        }
+        profileDocument.setData(
+            ["profilePicture": picture.rawValue],
+            merge: true
+        )
+        profile?.profilePicture = picture
+    }
+
+    func saveEvents(_ username: String) {
+        saveUsername(username)
     }
 
     // Read the signed-in user's own profile

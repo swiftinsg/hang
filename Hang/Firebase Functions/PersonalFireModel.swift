@@ -14,10 +14,18 @@ struct ProfileData: Identifiable, Codable {
     /// Account-wide reminder choice. Stored on the user document so it follows
     /// the account to every device. Older documents default to no reminders.
     var reminderPreference: ReminderPreference = .none
+    /// Avatar shared with the member's groups. Older documents default to the
+    /// first letter of the username.
+    var profilePicture: ProfilePicture = .initial
 
-    init(username: String, reminderPreference: ReminderPreference = .none) {
+    init(
+        username: String,
+        reminderPreference: ReminderPreference = .none,
+        profilePicture: ProfilePicture = .initial
+    ) {
         self.username = username
         self.reminderPreference = reminderPreference
+        self.profilePicture = profilePicture
     }
 
     init(from decoder: Decoder) throws {
@@ -27,16 +35,21 @@ struct ProfileData: Identifiable, Codable {
             ReminderPreference.self,
             forKey: .reminderPreference
         ) ?? .none
+        profilePicture = try container.decodeIfPresent(
+            ProfilePicture.self,
+            forKey: .profilePicture
+        ) ?? .initial
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(username, forKey: .username)
         try container.encode(reminderPreference, forKey: .reminderPreference)
+        try container.encode(profilePicture, forKey: .profilePicture)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, username, reminderPreference
+        case id, username, reminderPreference, profilePicture
     }
 }
 

@@ -102,6 +102,34 @@ final class GroupStore {
         eventListeners.removeAll()
     }
 
+    /// Forces a fresh read of groups and their events for pull-to-refresh.
+    /// Existing live listeners are kept so later changes still arrive.
+    func refresh() async {
+        guard let userDocument = currentUserDocument else {
+            groups = []
+            return
+        }
+
+        do {
+            let snapshot = try await groupsCollection
+                .whereField("people", arrayContains: userDocument)
+                .getDocuments()
+            let loaded = await buildGroups(
+                documents: snapshot.documents,
+                groupsCollection: groupsCollection,
+                currentUserDocument: userDocument
+            )
+
+            groups = loaded
+            errorMessage = nil
+            for group in loaded {
+                startListeningToEvents(for: group)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     // MARK: - Creating a group
 
     /// Creates a group in Firestore with the given name and description, using
@@ -121,7 +149,7 @@ final class GroupStore {
 
         let groupDocument = groupsCollection.document()
         let uid = userDocument.documentID
-        let username = await currentUsername()
+        let profile = await currentProfile()
         guard !AccountDeletionController.shared.isDeleting else {
             throw GroupStoreError.accountDeletionInProgress
         }
@@ -131,7 +159,8 @@ final class GroupStore {
             name: name,
             desc: desc,
             people: [userDocument],
-            memberNames: username.isEmpty ? [:] : [uid: username]
+            memberNames: profile.username.isEmpty ? [:] : [uid: profile.username],
+            memberProfilePictures: [uid: profile.picture.rawValue]
         )
 
         let batch = db.batch()
@@ -171,16 +200,17 @@ final class GroupStore {
         }
 
         let uid = userDocument.documentID
-        let username = await currentUsername()
+        let profile = await currentProfile()
         guard !AccountDeletionController.shared.isDeleting else {
             throw GroupStoreError.accountDeletionInProgress
         }
 
         var groupUpdate: [String: Any] = [
-            "people": FieldValue.arrayUnion([userDocument])
+            "people": FieldValue.arrayUnion([userDocument]),
+            "memberProfilePictures.\(uid)": profile.picture.rawValue
         ]
-        if !username.isEmpty {
-            groupUpdate["memberNames.\(uid)"] = username
+        if !profile.username.isEmpty {
+            groupUpdate["memberNames.\(uid)"] = profile.username
         }
 
         let batch = db.batch()
@@ -217,7 +247,11 @@ final class GroupStore {
 
         let batch = db.batch()
         batch.updateData(
-            ["people": FieldValue.arrayRemove([userDocument])],
+            [
+                "people": FieldValue.arrayRemove([userDocument]),
+                "memberNames.\(userDocument.documentID)": FieldValue.delete(),
+                "memberProfilePictures.\(userDocument.documentID)": FieldValue.delete()
+            ],
             forDocument: groupDocument
         )
         batch.updateData(
@@ -346,49 +380,59 @@ final class GroupStore {
 
     // MARK: - Helpers
 
-    /// The signed-in user's username from their own profile document. Only the
-    /// account owner can read this, which is why it is copied into each group.
-    private func currentUsername() async -> String {
-        guard let uid = Auth.auth().currentUser?.uid else { return "" }
+    /// The signed-in user's display data from their own profile document. Only
+    /// the account owner can read this, which is why it is copied into groups.
+    private func currentProfile() async -> (username: String, picture: ProfilePicture) {
+        guard let uid = Auth.auth().currentUser?.uid else { return ("", .initial) }
         let document = try? await db
             .collection(Path.Firestore.Users)
             .document(uid)
             .getDocument()
-        let raw = document?.data()?["username"] as? String ?? ""
-        return raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let data = document?.data()
+        let raw = data?["username"] as? String ?? ""
+        let rawPicture = data?["profilePicture"] as? String ?? ""
+        return (
+            raw.trimmingCharacters(in: .whitespacesAndNewlines),
+            ProfilePicture(rawValue: rawPicture) ?? .initial
+        )
     }
 
-    /// Copies this user's current username into every group they belong to, so
-    /// other members see a real name instead of the "Member" placeholder.
-    /// Safe to call on launch and whenever the username changes.
-    func refreshMyDisplayName() async {
+    /// Copies this user's current username and profile picture into every group
+    /// they belong to, so other members see a real name and avatar instead of
+    /// placeholders. Safe to call on launch and whenever either choice changes.
+    func refreshMyProfile(picture: ProfilePicture? = nil) async {
         guard let uid = Auth.auth().currentUser?.uid else { return }
-        let username = await currentUsername()
-        guard !username.isEmpty else { return }
+        let profile = await currentProfile()
+        // The caller may have just saved a new picture; prefer that over a
+        // profile read that could still return the previous value.
+        let selectedPicture = picture ?? profile.picture
 
-        var ids = Set(groups.map(\.documentID).filter { !$0.isEmpty })
-        if let userDocument = try? await db
-            .collection(Path.Firestore.Users)
-            .document(uid)
-            .getDocument(),
-            let references = userDocument.data()?["groupsIn"] as? [DocumentReference]
-        {
-            ids.formUnion(references.map(\.documentID))
-        }
-
+        // Only groups from the membership listener are safe to update. A stale
+        // `groupsIn` reference would be denied by the tightened rules and could
+        // fail the entire batch, so it is deliberately not used here.
+        let ids = Set(groups.map(\.documentID).filter { !$0.isEmpty })
         guard !ids.isEmpty else { return }
+
+        var update: [String: Any] = [
+            "memberProfilePictures.\(uid)": selectedPicture.rawValue
+        ]
+        if !profile.username.isEmpty {
+            update["memberNames.\(uid)"] = profile.username
+        }
 
         let batch = db.batch()
         for id in ids {
-            batch.updateData(
-                ["memberNames.\(uid)": username],
-                forDocument: groupsCollection.document(id)
-            )
+            batch.updateData(update, forDocument: groupsCollection.document(id))
         }
         // The profile read above can finish after account deletion has begun.
         // Do not let that older operation recreate membership data afterward.
         guard !AccountDeletionController.shared.isDeleting else { return }
-        try? await batch.commit()
+        do {
+            try await batch.commit()
+            await MainActor.run { self.errorMessage = nil }
+        } catch {
+            await MainActor.run { self.errorMessage = error.localizedDescription }
+        }
     }
 
     private func isInviteCodeTaken(_ code: String) async throws -> Bool {

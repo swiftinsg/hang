@@ -117,6 +117,11 @@ struct ContentView: View {
             // publish our own to any newly joined group.
             availabilityStore.sync(groupIDs: ids)
             Task { await publishAvailability(to: ids) }
+            // Once membership is known, backfill the copied name/avatar into
+            // those groups (also covers a profile change made before load).
+            if !ids.isEmpty {
+                Task { await GroupStore.shared.refreshMyProfile() }
+            }
         }
         .onChange(of: calendarStore.events) { _, _ in
             Task { await publishAvailability(to: groupIDs, force: true) }
@@ -151,7 +156,7 @@ struct ContentView: View {
             ) ?? ""
             showNamePrompt = trimmedName.isEmpty
             if !trimmedName.isEmpty {
-                Task { await GroupStore.shared.refreshMyDisplayName() }
+                Task { await GroupStore.shared.refreshMyProfile() }
             }
         }
         .alert("Enter your username", isPresented: $showNamePrompt) {
@@ -163,7 +168,7 @@ struct ContentView: View {
                 guard !trimmedName.isEmpty else { return }
                 saveManager.saveUsername(trimmedName)
                 userName = ""
-                Task { await GroupStore.shared.refreshMyDisplayName() }
+                Task { await GroupStore.shared.refreshMyProfile() }
             }
             .keyboardShortcut(.defaultAction)
             

@@ -18,6 +18,7 @@ private enum PersonalCalendarSheet: Identifiable {
 struct MeView: View {
     // Personal events are owned here. Group events are read from the shared
     // We store, so anything added in We appears here (one-way sync).
+
     @State private var groupStore = GroupStore.shared
     @State private var personalStore = PersonalEventsStore.shared
 
@@ -119,15 +120,10 @@ struct PersonalCalendarView: View {
         return (originalIndex + 6) % 7
     }
 
-    private func isPastDate(_ date: Date) -> Bool {
-        date < calendar.startOfDay(for: Date())
-    }
-
-    /// Past days can't be selected, so never pass one to the timeline or a
-    /// create sheet (e.g. if the app stays open past midnight).
+    /// The personal calendar behaves like a normal calendar: any date can be
+    /// selected, including past dates, so they can be viewed and edited.
     private var effectiveSelectedDate: Date {
-        let selected = selectedDate ?? Date()
-        return isPastDate(selected) ? Date() : selected
+        selectedDate ?? Date()
     }
 
     private func changeMonth(by value: Int) {
@@ -183,6 +179,9 @@ struct PersonalCalendarView: View {
         }
         .onAppear {
             calendarStore.loadEventsIfAuthorized()
+        }
+        .refreshable {
+            await AppReloader.reloadAll()
         }
         .overlay(alignment: .bottomTrailing) {
             createEventButton
@@ -295,17 +294,16 @@ struct PersonalCalendarView: View {
         }
     }
 
-    // Days before today are disabled and shown as plain gray cells.
     private func dayCell(for date: Date) -> some View {
         let isCurrentMonth = calendar.isDate(
             date,
             equalTo: displayedMonth,
             toGranularity: .month
         )
-        let isPastDate = isPastDate(date)
 
-        let isSelected = !isPastDate
-            && (selectedDate.map { calendar.isDate($0, inSameDayAs: date) } ?? false)
+        let isSelected = selectedDate.map {
+            calendar.isDate($0, inSameDayAs: date)
+        } ?? false
 
         let dayStart = calendar.startOfDay(for: date)
         let dayEnd =
@@ -313,14 +311,12 @@ struct PersonalCalendarView: View {
 
         // Highlight every day an event covers, including the days in between
         // its start and end, so selecting a middle day still shows the event.
-        // Past days never get markers or outlines.
-        let hasCalendarEvents = !isPastDate && (
+        let hasCalendarEvents =
             !calendarStore.events(on: date, calendar: calendar).isEmpty
                 || personalEvents.contains { event in
                     event.startDate < dayEnd && event.endDate > dayStart
                 }
-        )
-        let hasGroupEvents = !isPastDate && groupEvents.contains { event in
+        let hasGroupEvents = groupEvents.contains { event in
             event.startDate < dayEnd && event.endDate > dayStart
         }
         let hasEvents = hasCalendarEvents || hasGroupEvents
@@ -330,22 +326,20 @@ struct PersonalCalendarView: View {
             Text("\(calendar.component(.day, from: date))")
                 .font(.subheadline)
                 .frame(maxWidth: .infinity, minHeight: 45)
-                .foregroundStyle(
-                    isPastDate
-                        ? Color.secondary.opacity(0.45)
-                        : (isCurrentMonth ? Color.primary : Color.secondary)
-                )
-                .background {
-                    if isPastDate {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(.systemGray5))
+                .foregroundStyle(isCurrentMonth ? Color.primary : Color.secondary)
+                .overlay {
+                    // Days that already have an event.
+                    if hasCalendarEvents {
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Color.orange, lineWidth: 2)
+                            .padding(2)
                     }
                 }
                 .overlay {
                     // Days that already have an event.
-                    if hasEvents {
+                    if hasGroupEvents {
                         RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Color.orange, lineWidth: 2)
+                            .strokeBorder(Color.blue, lineWidth: 2)
                             .padding(2)
                     }
                 }
@@ -386,12 +380,7 @@ struct PersonalCalendarView: View {
         }
         
         .buttonStyle(.plain)
-        .disabled(isPastDate)
-        .accessibilityLabel(
-            isPastDate
-                ? "\(calendar.component(.day, from: date)), unavailable past date"
-                : "\(calendar.component(.day, from: date))"
-        )
+        .accessibilityLabel("\(calendar.component(.day, from: date))")
     }
 
     // Floating action button, pinned to the bottom of the screen so it stays

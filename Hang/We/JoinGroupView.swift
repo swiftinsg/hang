@@ -27,6 +27,7 @@ struct JoinGroupView: View {
                     }
 
                     TextField("", text: $code)
+                        .tint(.clear)
                         .textContentType(.oneTimeCode)  // Enables iOS SMS AutoFill
                         .focused($isFocused)
                         .accentColor(.clear)

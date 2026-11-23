@@ -116,6 +116,7 @@ final class AccountDeletionController: NSObject {
             let people = data["people"] as? [DocumentReference] ?? []
             let isMember = people.contains { $0.path == userDocument.path }
             let memberNames = data["memberNames"] as? [String: Any] ?? [:]
+            let memberPictures = data["memberProfilePictures"] as? [String: Any] ?? [:]
             var updates: [String: Any] = [:]
 
             if isMember {
@@ -123,6 +124,9 @@ final class AccountDeletionController: NSObject {
             }
             if memberNames[uid] != nil {
                 updates["memberNames.\(uid)"] = FieldValue.delete()
+            }
+            if memberPictures[uid] != nil {
+                updates["memberProfilePictures.\(uid)"] = FieldValue.delete()
             }
 
             let batch = db.batch()

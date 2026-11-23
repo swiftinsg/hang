@@ -18,6 +18,9 @@ private struct PersonalBusyItem: Identifiable {
     let title: String
     let start: Date
     let end: Date
+    /// Set only for events created in Hang, so the personal calendar can open
+    /// them for editing. Imported device-calendar events stay read only.
+    let personalEvent: GroupEvents?
 }
 
 struct DayAvailabilityView: View {
@@ -34,6 +37,11 @@ struct DayAvailabilityView: View {
     /// Called when a group event block is tapped. Personal events stay read
     /// only in the shared calendar.
     var onEditGroupEvent: ((GroupEvents) -> Void)? = nil
+
+    /// Called when one of your own events is tapped. Only the personal
+    /// calendar passes this, so your events remain editable there while the
+    /// shared calendar keeps them read only.
+    var onEditPersonalEvent: ((GroupEvents) -> Void)? = nil
 
     /// Committed pinch-to-zoom level for the hour rows.
     @State private var zoom: CGFloat = 1
@@ -91,7 +99,8 @@ struct DayAvailabilityView: View {
                 id: event.id.uuidString,
                 title: event.name,
                 start: event.startDate,
-                end: event.endDate
+                end: event.endDate,
+                personalEvent: event
             )
         }
         let imported = importedEvents.map { event in
@@ -99,7 +108,8 @@ struct DayAvailabilityView: View {
                 id: event.id,
                 title: event.title,
                 start: event.startDate,
-                end: event.endDate
+                end: event.endDate,
+                personalEvent: nil
             )
         }
 
@@ -195,27 +205,23 @@ struct DayAvailabilityView: View {
                     title: "Availability Legend",
                     entries: [
                         CalendarLegendEntry(
-                            title: "Free",
+                            title: "Free Days",
                             fill: colors.green.opacity(0.2)
                         ),
                         CalendarLegendEntry(
-                            title: "Member busy",
-                            fill: .secondary.opacity(0.45)
-                        ),
-                        CalendarLegendEntry(
-                            title: "Your calendar",
-                            fill: colors.dgreen.opacity(0.75)
-                        ),
-                        CalendarLegendEntry(
-                            title: "Group event",
-                            fill: .orange.opacity(0.15),
-                            stroke: .orange,
+                            title: "Recommended Days",
+                            fill: .clear,
+                            stroke: .blue,
                             dashed: true
                         ),
                         CalendarLegendEntry(
-                            title: "Not shared yet",
-                            fill: .clear,
-                            stroke: .secondary,
+                            title: "Your calendar Entries",
+                            fill: colors.dgreen.opacity(0.75)
+                        ),
+                        CalendarLegendEntry(
+                            title: "Group Event",
+                            fill: .blue.opacity(0.15),
+                            stroke: .blue,
                             dashed: true
                         ),
                     ]
@@ -281,11 +287,7 @@ struct DayAvailabilityView: View {
         HStack(spacing: 0) {
             ForEach(members) { member in
                 VStack(spacing: 3) {
-                    Text(String(member.name.prefix(1)))
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 26, height: 26)
-                        .background(member.tint, in: Circle())
+                    ProfileAvatarView(person: member, size: 26)
 
                     Text(member.name)
                         .font(.caption2)
@@ -328,7 +330,11 @@ struct DayAvailabilityView: View {
             if isCurrentUser {
                 // Your own events stay on this device; only you see the titles.
                 ForEach(timedPersonalItems) { item in
-                    personalBlock(item, columnWidth: columnWidth)
+                    personalBlock(
+                        item,
+                        columnWidth: columnWidth,
+                        onEdit: personalEditAction(for: item)
+                    )
                 }
             } else {
                 // Anonymous busy intervals published by this member.
@@ -420,10 +426,21 @@ struct DayAvailabilityView: View {
             )
     }
 
-    /// Your personal events are shown in your own column, read only.
+    private func personalEditAction(
+        for item: PersonalBusyItem
+    ) -> (() -> Void)? {
+        guard let event = item.personalEvent, let onEditPersonalEvent else {
+            return nil
+        }
+        return { onEditPersonalEvent(event) }
+    }
+
+    /// Your personal events fill your own column. They are read only in the
+    /// shared calendar and tappable in the personal calendar.
     private func personalBlock(
         _ item: PersonalBusyItem,
-        columnWidth: CGFloat
+        columnWidth: CGFloat,
+        onEdit: (() -> Void)? = nil
     ) -> some View {
         let visibleStart = max(item.start, window.start)
         let visibleEnd = min(item.end, window.end)
@@ -434,7 +451,7 @@ struct DayAvailabilityView: View {
         let barHeight = max(4, CGFloat(durationHours) * hourHeight - 1)
         let cornerRadius = min(8, barWidth / 3)
 
-        return RoundedRectangle(cornerRadius: cornerRadius)
+        let block = RoundedRectangle(cornerRadius: cornerRadius)
             .fill(colors.dgreen.opacity(0.75))
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius)
@@ -451,11 +468,24 @@ struct DayAvailabilityView: View {
                 }
             }
             .frame(width: barWidth, height: barHeight)
-            .offset(
-                x: (columnWidth - barWidth) / 2,
-                y: CGFloat(startHours) * hourHeight
-            )
-            .allowsHitTesting(false)
+
+        return Group {
+            if let onEdit {
+                Button(action: onEdit) {
+                    block
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(item.title)
+                .accessibilityHint("Edit or delete this event")
+            } else {
+                block
+                    .allowsHitTesting(false)
+            }
+        }
+        .offset(
+            x: (columnWidth - barWidth) / 2,
+            y: CGFloat(startHours) * hourHeight
+        )
     }
 
     /// One orange band per group event, spanning every member column.
@@ -487,11 +517,11 @@ struct DayAvailabilityView: View {
         let bandHeight = max(18, CGFloat(durationHours) * hourHeight - 1)
 
         let band = RoundedRectangle(cornerRadius: 6)
-            .fill(Color.orange.opacity(0.15))
+            .fill(Color.blue.opacity(0.15))
             .overlay {
                 RoundedRectangle(cornerRadius: 6)
                     .strokeBorder(
-                        Color.orange,
+                        Color.blue,
                         style: StrokeStyle(lineWidth: 1.5, dash: [4, 2])
                     )
             }

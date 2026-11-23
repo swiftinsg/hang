@@ -7,6 +7,7 @@ Firestore
 │       ├── userId: String  // TODO: REMOVE??
 │       ├── username: String
 │       ├── reminderPreference: String  // "none" | "1day" | "2hours"; per-user global reminder for ALL events
+│       ├── profilePicture: String  // "initial" (first letter of username) or a profilePictures asset name
 │       ├── groupsIn: [DocumentReference]
 │       └── calendar (subcollection)
 │           └── entryID (document)
@@ -23,6 +24,7 @@ Firestore
         ├── desc: String
         ├── people: [DocumentReference]
         ├── memberNames: { uid: username, ... }  // display names shared with the group
+        ├── memberProfilePictures: { uid: picture, ... }  // avatars shared with the group; values match profilePicture above
         ├── events (subcollection)
         │   └── eventID (document)
         │       ├── name: String

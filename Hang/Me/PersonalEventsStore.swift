@@ -60,16 +60,7 @@ final class PersonalEventsStore {
                 return
             }
 
-            let loaded = (snapshot?.documents ?? []).compactMap {
-                document -> GroupEvents? in
-                guard
-                    let data = try? document.data(as: PersonalEventData.self)
-                else {
-                    return nil
-                }
-                return data.groupEvent(documentID: document.documentID)
-            }
-            .sorted { $0.time < $1.time }
+            let loaded = Self.decodeEvents(from: snapshot?.documents ?? [])
 
             Task { @MainActor in
                 self.events = loaded
@@ -82,6 +73,37 @@ final class PersonalEventsStore {
         listener?.remove()
         listener = nil
         listeningUID = nil
+    }
+
+    /// Forces a fresh read for pull-to-refresh. The live listener stays in
+    /// place, so later changes still arrive without another manual refresh.
+    func refresh() async {
+        guard let collection = calendarCollection else {
+            events = []
+            return
+        }
+
+        do {
+            let snapshot = try await collection.getDocuments()
+            events = Self.decodeEvents(from: snapshot.documents)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private static func decodeEvents(
+        from documents: [QueryDocumentSnapshot]
+    ) -> [GroupEvents] {
+        documents.compactMap { document in
+            guard
+                let data = try? document.data(as: PersonalEventData.self)
+            else {
+                return nil
+            }
+            return data.groupEvent(documentID: document.documentID)
+        }
+        .sorted { $0.time < $1.time }
     }
 
     /// Saves a new personal event. Its UUID becomes the document ID so the

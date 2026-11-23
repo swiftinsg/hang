@@ -91,6 +91,11 @@ final class PersonalCalendarStore {
         loadEvents()
     }
 
+    /// Manual refresh entry point used by pull-to-refresh.
+    func refresh() {
+        loadEventsIfAuthorized()
+    }
+
     /// Events that overlap the day containing `date`.
     func events(on date: Date, calendar: Calendar = .current) -> [PersonalCalendarEvent] {
         let dayStart = calendar.startOfDay(for: date)
