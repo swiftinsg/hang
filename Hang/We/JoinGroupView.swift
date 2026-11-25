@@ -11,7 +11,7 @@ struct JoinGroupView: View {
     @FocusState private var isFocused: Bool
 
     private var store: GroupStore { GroupStore.shared }
- 
+
     var body: some View {
         NavigationStack {
             VStack {
@@ -34,7 +34,8 @@ struct JoinGroupView: View {
                         .foregroundColor(.clear)
                         .background(Color.clear)
                         .onChange(of: code) { _, newValue in
-                            code = String(newValue.prefix(codeLength)).uppercased()
+                            code = String(newValue.prefix(codeLength))
+                                .uppercased()
                         }
                 }
                 .contentShape(Rectangle())
@@ -44,6 +45,13 @@ struct JoinGroupView: View {
                 .onAppear {
                     isFocused = true
                 }
+
+                PasteButton(payloadType: String.self) { strings in
+                    if let pasted = strings.first {
+                        code = pasted
+                    }
+                }
+                .labelStyle(.iconOnly)
 
                 Spacer()
             }
@@ -70,7 +78,9 @@ struct JoinGroupView: View {
         Task {
             do {
                 try await store.joinGroup(
-                    inviteCode: code.trimmingCharacters(in: .whitespacesAndNewlines)
+                    inviteCode: code.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    )
                 )
                 dismiss()
             } catch {

@@ -18,7 +18,7 @@ private enum GroupCalendarSheet: Identifiable {
 public enum GroupTab: String, CaseIterable, Identifiable {
     case cal = "Calendar"
     case events = "Events"
-    case info = "More Info"
+    case info = "Group Info"
 
     public var id: Self { self }
 }
@@ -29,7 +29,7 @@ struct GroupView: View {
     @Binding var tg: TestGroup
     @State private var selectedGroupTab: GroupTab = .events
     @State private var availabilityStore = AvailabilityStore.shared
-    @State var screenSize : CGSize = .zero
+    @State var screenSize: CGSize = .zero
     var body: some View {
         NavigationStack {
             ZStack {
@@ -101,10 +101,10 @@ struct GroupView: View {
                     Person(name: "seren", status: "i am skibidi")
                 ],
                 events: [
-//                    GroupEvents(name: "event1", time: 1_720_708_600),
-//                    GroupEvents(name: "event2", time: 1_790_403_500),
+                    //                    GroupEvents(name: "event1", time: 1_720_708_600),
+                    //                    GroupEvents(name: "event2", time: 1_790_403_500),
                 ]
-                
+
             )
         )
     )
@@ -412,7 +412,10 @@ struct CalendarView: View {
                     } else {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(
-                                .green.adjusted(saturation: 0.5, brightness: -0.07).opacity(
+                                .green.adjusted(
+                                    saturation: 0.5,
+                                    brightness: -0.07
+                                ).opacity(
                                     isCurrentMonth ? shading : shading * 0.4
                                 )
                             )
@@ -425,7 +428,7 @@ struct CalendarView: View {
                                 .resizable()
                                 .scaledToFit()
                                 .scaleEffect(0.9)
-                                .offset(y: cellSize.height*0.18)
+                                .offset(y: cellSize.height * 0.18)
                         }
                     }
                 }
@@ -436,8 +439,8 @@ struct CalendarView: View {
                             .resizable()
                             .scaledToFit()
                             .scaleEffect(0.5)
-                            .offset(y: cellSize.height*0.3)
-                            .offset(x: cellSize.height*4)
+                            .offset(y: cellSize.height * 0.3)
+                            .offset(x: cellSize.height * 4)
 
                     }
                 }
@@ -453,7 +456,7 @@ struct CalendarView: View {
                             )
                     }
                 }
-                
+
                 .overlay {
                     // Days that already have an event.
                     if hasGroupEvents {
@@ -529,7 +532,7 @@ struct NewGroupEventButton: View {
 
 struct EventView: View {
     @Binding var tg: TestGroup
-    var size : CGSize
+    var size: CGSize
     var sizing = Sizing()
     // rip Colors() struct
     @State private var showAddView = false
@@ -561,6 +564,7 @@ struct EventView: View {
                                 Text(event.name)
                                     .font(.title3)
                                     .fontWeight(.bold)
+                                    .lineLimit(1)
 
                                 HStack {
                                     Text(
@@ -599,12 +603,14 @@ struct EventView: View {
                                                     time: .shortened
                                                 )
                                     )
-                                    Divider()
-                                    Text(
-                                        event.location.isEmpty
-                                            ? "No location" : event.location
-                                    )
                                 }
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+
+                                Text(
+                                    event.location.isEmpty
+                                        ? "No location" : event.location
+                                )
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
 
@@ -648,7 +654,7 @@ struct EventView: View {
                 .presentationDetents([.medium, .large])
             }
         }
-    } 
+    }
 }
 
 struct MoreInfoView: View {
@@ -658,6 +664,8 @@ struct MoreInfoView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var isConfirmingLeave = false
+    @State private var isFilled = false
+    @State private var resetTask: Task<Void, Never>?
 
     var body: some View {
         List {
@@ -666,16 +674,35 @@ struct MoreInfoView: View {
                     ForEach(0..<6, id: \.self) { index in
                         otpDigitBox(at: index)
                     }
+                    Button {
+                        resetTask?.cancel()
+
+                        isFilled = true
+
+                        let generator = UINotificationFeedbackGenerator()
+                        generator.notificationOccurred(.success)
+                        
+                        resetTask = Task {
+                            try? await Task.sleep(for: .seconds(2))
+                            guard !Task.isCancelled else { return }
+                            isFilled = false
+                        }
+
+                        UIPasteboard.general.string = tg.code
+                    } label: {
+                        Image(systemName: isFilled ? "checkmark" : "doc.on.doc")
+                            .contentTransition(.symbolEffect(.replace))
+                    }
                 }
             }
             .listRowBackground(Color(.secondarySystemBackground))
 
-//            Section("Description") {
-//                Text(tg.desc)
-//                Button("Edit description", systemImage: "pencil") {}
-//                    .foregroundStyle(Color(.accent))
-//            }
-//            .listRowBackground(Color(.secondarySystemBackground))
+            //            Section("Description") {
+            //                Text(tg.desc)
+            //                Button("Edit description", systemImage: "pencil") {}
+            //                    .foregroundStyle(Color(.accent))
+            //            }
+            //            .listRowBackground(Color(.secondarySystemBackground))
 
             Section("Members (\(tg.members.count))") {
                 ForEach(tg.members) { member in

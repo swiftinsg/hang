@@ -124,7 +124,7 @@ struct GroupCard: View {
                     ForEach(Array(tg.members.prefix(5))) { member in
                             ProfileAvatarView(person: member, size: 32)
                             .background(
-                                Color(red: 234 / 255, green: 236 / 255, blue: 242 / 255)
+                                .background
                             )
                         .clipShape(.circle)
                     }

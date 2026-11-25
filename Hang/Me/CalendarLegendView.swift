@@ -7,66 +7,135 @@
 
 import SwiftUI
 
-struct CalendarLegendEntry: Identifiable {
-    let id = UUID()
-    let title: String
-    let fill: Color
-    var stroke: Color?
-    var dashed: Bool = false
-}
+//struct CalendarLegendEntry: Identifiable {
+//    let id = UUID()
+//    let title: String
+//    let fill: Color
+//    var stroke: Color?
+//    var dashed: Bool = false
+//}
 
 struct CalendarLegendView: View {
-    let title: String
-    let entries: [CalendarLegendEntry]
-
+    @Environment(\.colorScheme) var colorScheme
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.headline)
-
-            ForEach(entries) { entry in
-                HStack(spacing: 8) {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(entry.fill)
-                        .overlay {
-                            if let stroke = entry.stroke {
-                                RoundedRectangle(cornerRadius: 3)
-                                    .strokeBorder(
-                                        stroke,
-                                        style: StrokeStyle(
-                                            lineWidth: 1.5,
-                                            dash: entry.dashed ? [3, 2] : []
-                                        )
-                                    )
+            Text("How to understand your calendars")
+                .font(.title)
+                .fontWeight(.bold)
+            Text("There are two different types of calendars, personal nd group calendars!")
+                .font(.subheadline)
+            Spacer()
+            HStack{
+                VStack{
+                    Image(.monoSingleHang)
+                        .resizable()
+                            .scaledToFit()
+                            .frame(maxHeight: 40) 
+                    Text("Me")
+                    Spacer()
+                    HStack{
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(.blue, lineWidth: 3)
+                            .fill(.clear)
+                            .frame(width:80, height:70)
+                        Text("If this little guy is there it means you have a group event")
+                            .font(.caption)
+                        
+                    }
+                    Spacer()
+                    HStack{
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(.blue, lineWidth: 3)
+                            .fill(.clear)
+                            .frame(width:80, height:70)
+                        Text("The bar at the bottom shows your color coded personal events")
+                            .font(.caption)
+                    }
+                    Spacer()
+                }
+                Divider()
+                VStack{
+                    Image(.monoDoubleHang)
+                        .resizable()
+                            .scaledToFit()
+                            .frame(maxHeight: 40)
+                    Text("We")
+                    Spacer()
+                    HStack(alignment: .bottom, spacing: 16){
+                        VStack{
+                            Text("less vibrant\n(less available)")
+                                .font(.caption)
+                            ZStack{
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(.green.adjusted(saturation: 0.5, brightness: -0.07))
+                                    .opacity(0.3)
+                                    .frame(width:80, height:70)
+                                Text("8")
                             }
                         }
-                        .frame(width: 18, height: 12)
+                        VStack{
+                            Text("more vibrant\n(more available)")
+                                .font(.caption)
+                            ZStack{
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(.green.adjusted(saturation: 0.5, brightness: -0.07))
+                                    .opacity(0.6)
+                                    .frame(width:80, height:70)
+                                Text("9")
+                            }
+                        }
 
-                    Text(entry.title)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    HStack{
+                        ZStack{
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(.green.adjusted(saturation: 0.5, brightness: -0.07))
+                                .opacity(0.8)
+                                .frame(width:80, height:70)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                    .strokeBorder(
+                                        Color.blue,
+                                        style: StrokeStyle(
+                                            lineWidth: 3,
+                                            dash: [3, 2]
+                                        )
+                                    )
+
+                                )
+
+                                Text("6")
+                            }
+                        Text("recommended most free dates")
+                            .font(.caption)
+                    }
+                    Spacer()
+                    if colorScheme == .dark {
+                            Image(.darkAvailability)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxHeight: 70)
+                                .padding()
+                            Text("press on a day and you can see peoples schedules(minus any details for their privacy)")
+                            .font(.caption)
+                       } else {
+                           Image(.lightAvailability)
+                               .resizable()
+                                   .scaledToFit()
+                                   .frame(maxHeight: 70)
+                                   .padding()
+                           Text("press on a day and you can see peoples schedules\n(minus any details for their privacy)")
+                               .font(.caption)
+                       }
+                    Spacer()
                 }
             }
         }
         .padding(16)
-        .frame(minWidth: 220, alignment: .leading)
     }
 }
 
 #Preview {
-    let colors = Colors()
-
-    CalendarLegendView(
-        title: "Calendar Legend",
-        entries: [
-            CalendarLegendEntry(title: "Free", fill: .green.adjusted(saturation: 0.5, brightness: -0.07).opacity(0.4)),
-            CalendarLegendEntry(title: "Your calendar", fill: .green.adjusted(saturation: 0.75, brightness: -0.25).opacity(0.85)),
-            CalendarLegendEntry(
-                title: "Hang event",
-                fill: .orange.opacity(0.15),
-                stroke: .orange,
-                dashed: true
-            ),
-        ]
-    )
+    CalendarLegendView()
 }

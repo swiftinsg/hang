@@ -167,6 +167,7 @@ struct ProfileView: View {
                 }
             }
         }
+        .toolbar(.hidden, for: .tabBar)
         .background(Color(.systemGroupedBackground))
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)

@@ -183,53 +183,30 @@ struct DayAvailabilityView: View {
     }
 
     private var headerRow: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text("Availability")
-                .font(.subheadline.bold())
-            Text(Self.dateFormatter.string(from: date))
-                .font(.caption)
+            HStack(alignment: .firstTextBaseline) {
+                Text("Availability")
+                    .font(.subheadline.bold())
+                Text(Self.dateFormatter.string(from: date))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                
+                Button {
+                    isShowingLegend = true
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.subheadline)
+                }
+                .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-            Spacer()
-
-            Button {
-                isShowingLegend = true
-            } label: {
-                Image(systemName: "info.circle")
-                    .font(.subheadline)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .accessibilityLabel("Availability legend")
-            .popover(isPresented: $isShowingLegend) {
-                CalendarLegendView(
-                    title: "Availability Legend",
-                    entries: [
-                        CalendarLegendEntry(
-                            title: "Free Days",
-                            fill: .green.adjusted(saturation: 0.5, brightness: -0.07).opacity(0.2)
-                        ),
-                        CalendarLegendEntry(
-                            title: "Recommended Days",
-                            fill: .clear,
-                            stroke: .blue,
-                            dashed: true
-                        ),
-                        CalendarLegendEntry(
-                            title: "Your calendar Entries",
-                            fill: .green.adjusted(saturation: 0.75, brightness: -0.25).opacity(0.75)
-                        ),
-                        CalendarLegendEntry(
-                            title: "Group Event",
-                            fill: .blue.opacity(0.15),
-                            stroke: .blue,
-                            dashed: true
-                        ),
-                    ]
-                )
-                .presentationCompactAdaptation(.popover)
+                .accessibilityLabel("Availability legend")
+                .popover(isPresented: $isShowingLegend) {
+                    CalendarLegendView()
+                        .presentationCompactAdaptation(.automatic)
+                }
             }
         }
-    }
+    
 
     /// Hour labels on the leading edge, member columns filling the rest of the width.
     private var timeline: some View {
