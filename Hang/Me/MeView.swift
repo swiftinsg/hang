@@ -120,8 +120,7 @@ struct PersonalCalendarView: View {
         return (originalIndex + 6) % 7
     }
 
-    /// The personal calendar behaves like a normal calendar: any date can be
-    /// selected, including past dates, so they can be viewed and edited.
+    /// The personal calendar behaves like a normal calendar: any date can be selected, including past dates, so they can be viewed and edited.
     private var effectiveSelectedDate: Date {
         selectedDate ?? Date()
     }
@@ -226,9 +225,9 @@ struct PersonalCalendarView: View {
                     .font(.subheadline.weight(.medium))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
-                    .foregroundStyle(colors.dgreen)
+                    .foregroundStyle(.black)
                     .background(
-                        colors.green.opacity(0.15),
+                        .accent.opacity(0.15),
                         in: RoundedRectangle(cornerRadius: 8)
                     )
             }
@@ -346,7 +345,7 @@ struct PersonalCalendarView: View {
                 .overlay {
                     if isSelected {
                         RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(colors.dgreen, lineWidth: 2.5)
+                            .strokeBorder(Color.accentColor, lineWidth: 2.5)
                     }
                 }
                 .overlay(alignment: .bottom) {
@@ -395,7 +394,7 @@ struct PersonalCalendarView: View {
         }
         .buttonStyle(.glassProminent)
         .controlSize(.large)
-        .tint(colors.dgreen)
+        .tint(.accent)
         .padding(.horizontal, 32)
         .buttonBorderShape(.circle)
     }

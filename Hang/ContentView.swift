@@ -70,6 +70,45 @@ struct ContentView: View {
     }
     
     var body: some View {
+        mainTabs
+            .disabled(accountDeletion.isDeleting)
+            .tint(Color("AccentColor"))
+            .fontDesign(.rounded)
+            .overlay {
+                if accountDeletion.isDeleting {
+                    deletingOverlay
+                }
+            }
+            .modifier(ContentSyncModifier(
+                groupIDs: groupIDs,
+                calendarEvents: calendarStore.events,
+                personalEvents: personalStore.events,
+                scenePhase: scenePhase,
+                hasLoadedProfile: saveManager.hasLoadedProfile,
+                onAppear: handleAppear,
+                onDisappear: handleDisappear,
+                onGroupIDsChange: handleGroupIDsChange,
+                onEventsChange: { Task { await publishAvailability(to: groupIDs, force: true) } },
+                onSceneBecameActive: handleSceneBecameActive,
+                onProfileLoaded: handleProfileLoaded
+            ))
+            .modifier(ReminderSyncModifier(
+                events: reminderEvents,
+                preference: saveManager.profile?.reminderPreference ?? .none,
+                scenePhase: scenePhase,
+                onSync: { Task { await syncReminders() } }
+            ))
+            .alert("Enter your username", isPresented: $showNamePrompt) {
+                TextField("Your name", text: $userName)
+                Button("Done", action: saveUsername)
+                    .keyboardShortcut(.defaultAction)
+                Button("Cancel", role: .cancel) {}
+            }
+    }
+
+    // MARK: - Subviews
+
+    private var mainTabs: some View {
         TabView {
             Tab {
                 WeView()
@@ -90,90 +129,64 @@ struct ContentView: View {
                 }
             }
         }
-        .disabled(accountDeletion.isDeleting)
-        .tint(Color("AccentColor"))
-        .fontDesign(.rounded)
-        .overlay {
-            if accountDeletion.isDeleting {
-                ZStack {
-                    Color(.systemBackground)
-                        .opacity(0.85)
-                        .ignoresSafeArea()
-                    ProgressView("Deleting Account…")
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var deletingOverlay: some View {
+        ZStack {
+            Color(uiColor: .systemBackground)
+                .opacity(0.85)
                 .ignoresSafeArea()
-            }
+            ProgressView("Deleting Account…")
         }
-        .onAppear {
-            saveManager.loadProfile()
-            // Keep the personal calendar in sync with the signed-in account.
-            PersonalEventsStore.shared.startListening()
-            // Keep the list of groups the user belongs to in sync.
-            GroupStore.shared.startListening()
-        }
-        .onChange(of: groupIDs, initial: true) { _, ids in
-            // Watch the busy times other members publish for each group, and
-            // publish our own to any newly joined group.
-            availabilityStore.sync(groupIDs: ids)
-            Task { await publishAvailability(to: ids) }
-            // Once membership is known, backfill the copied name/avatar into
-            // those groups (also covers a profile change made before load).
-            if !ids.isEmpty {
-                Task { await GroupStore.shared.refreshMyProfile() }
-            }
-        }
-        .onChange(of: calendarStore.events) { _, _ in
-            Task { await publishAvailability(to: groupIDs, force: true) }
-        }
-        .onChange(of: personalStore.events) { _, _ in
-            Task { await publishAvailability(to: groupIDs, force: true) }
-        }
-        // Rebuild local reminders whenever events, the preference or
-        // notification permission change. Kept in a modifier to keep this
-        // view's body type-checkable.
-        .modifier(ReminderSyncModifier(
-            events: reminderEvents,
-            preference: saveManager.profile?.reminderPreference ?? .none,
-            scenePhase: scenePhase,
-            onSync: { Task { await syncReminders() } }
-        ))
-        .onChange(of: scenePhase) { _, phase in
-            guard phase == .active else { return }
-            calendarStore.loadEventsIfAuthorized()
-            Task { await publishAvailability(to: groupIDs, force: true) }
-        }
-        .onDisappear {
-            availabilityStore.stopAll()
-            Task { await ReminderScheduler.shared.cancelAll() }
-        }
-        .onChange(of: saveManager.hasLoadedProfile) { _, loaded in
-            guard loaded else { return }
-            // Only accounts without a username get the prompt.
-            let trimmedName =
-            saveManager.profile?.username.trimmingCharacters(
-                in: .whitespacesAndNewlines
-            ) ?? ""
-            showNamePrompt = trimmedName.isEmpty
-            if !trimmedName.isEmpty {
-                Task { await GroupStore.shared.refreshMyProfile() }
-            }
-        }
-        .alert("Enter your username", isPresented: $showNamePrompt) {
-            TextField("Your name", text: $userName)
-            Button("Done", role: .confirm) {
-                let trimmedName = userName.trimmingCharacters(
-                    in: .whitespacesAndNewlines
-                )
-                guard !trimmedName.isEmpty else { return }
-                saveManager.saveUsername(trimmedName)
-                userName = ""
-                Task { await GroupStore.shared.refreshMyProfile() }
-            }
-            .keyboardShortcut(.defaultAction)
-            
-            Button("Cancel", role: .cancel) {}
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
+    }
+
+    // MARK: - Lifecycle & Sync Handlers
+
+    private func handleAppear() {
+        saveManager.loadProfile()
+        PersonalEventsStore.shared.startListening()
+        GroupStore.shared.startListening()
+    }
+
+    private func handleDisappear() {
+        availabilityStore.stopAll()
+        Task { await ReminderScheduler.shared.cancelAll() }
+    }
+
+    private func handleGroupIDsChange(_ ids: [String]) {
+        availabilityStore.sync(groupIDs: ids)
+        Task { await publishAvailability(to: ids) }
+        // Uncomment once GroupStore.shared.refreshMyProfile() is implemented:
+        // if !ids.isEmpty {
+        //     Task { await GroupStore.shared.refreshMyProfile() }
+        // }
+    }
+
+    private func handleSceneBecameActive() {
+        calendarStore.loadEventsIfAuthorized()
+        Task { await publishAvailability(to: groupIDs, force: true) }
+    }
+
+    private func handleProfileLoaded() {
+        let trimmedName = saveManager.profile?.username.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ) ?? ""
+        showNamePrompt = trimmedName.isEmpty
+        // Uncomment once GroupStore.shared.refreshMyProfile() is implemented:
+        // if !trimmedName.isEmpty {
+        //     Task { await GroupStore.shared.refreshMyProfile() }
+        // }
+    }
+
+    private func saveUsername() {
+        let trimmedName = userName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        saveManager.saveUsername(trimmedName)
+        userName = ""
+        // Uncomment once GroupStore.shared.refreshMyProfile() is implemented:
+        // Task { await GroupStore.shared.refreshMyProfile() }
     }
 
     /// Schedules the user's chosen reminder for all their events on this device.
@@ -198,6 +211,48 @@ struct ContentView: View {
             uid: uid,
             force: force
         )
+    }
+}
+
+// MARK: - Extracted Sync Modifiers
+
+private struct ContentSyncModifier<CalendarEvent: Equatable, PersonalEvent: Equatable>: ViewModifier {
+    let groupIDs: [String]
+    let calendarEvents: [CalendarEvent]
+    let personalEvents: [PersonalEvent]
+    let scenePhase: ScenePhase
+    let hasLoadedProfile: Bool
+
+    let onAppear: () -> Void
+    let onDisappear: () -> Void
+    let onGroupIDsChange: ([String]) -> Void
+    let onEventsChange: () -> Void
+    let onSceneBecameActive: () -> Void
+    let onProfileLoaded: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear(perform: onAppear)
+            .onDisappear(perform: onDisappear)
+            .onChange(of: groupIDs, initial: true) { _, ids in
+                onGroupIDsChange(ids)
+            }
+            .onChange(of: calendarEvents) { _, _ in
+                onEventsChange()
+            }
+            .onChange(of: personalEvents) { _, _ in
+                onEventsChange()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    onSceneBecameActive()
+                }
+            }
+            .onChange(of: hasLoadedProfile) { _, loaded in
+                if loaded {
+                    onProfileLoaded()
+                }
+            }
     }
 }
 

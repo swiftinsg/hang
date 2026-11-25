@@ -59,8 +59,8 @@ struct CalendarLegendView: View {
     CalendarLegendView(
         title: "Calendar Legend",
         entries: [
-            CalendarLegendEntry(title: "Free", fill: colors.green.opacity(0.4)),
-            CalendarLegendEntry(title: "Your calendar", fill: colors.dgreen.opacity(0.85)),
+            CalendarLegendEntry(title: "Free", fill: .green.adjusted(saturation: 0.5, brightness: -0.07).opacity(0.4)),
+            CalendarLegendEntry(title: "Your calendar", fill: .green.adjusted(saturation: 0.75, brightness: -0.25).opacity(0.85)),
             CalendarLegendEntry(
                 title: "Hang event",
                 fill: .orange.opacity(0.15),

@@ -2,7 +2,7 @@ import SwiftUI
 
 struct WeView: View {
     var sizing = Sizing()
-    var colors = Colors()
+    // rip Colors() struct
     @State var searchQuery = ""
     @State var countPicker: Int = 0
     @State private var store = GroupStore.shared
@@ -93,7 +93,7 @@ struct WeView: View {
 
 struct GroupCard: View {
     var sizing = Sizing()
-    var colors = Colors()
+    // rip Colors() struct
     let tg: TestGroup
     let members: [Person]
     var body: some View {

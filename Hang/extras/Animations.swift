@@ -1,18 +1,17 @@
 import Foundation
 import SwiftUI
 
+
+
 public struct Colors {
-    let green = Color(red: 0.4, green: 0.7, blue: 0.6)
-    let green1 = Color(red: 0.6, green: 0.9, blue: 0.8)
-    let green2 = Color(red: 0.7, green: 1, blue: 0.9)
-    let dgreen = Color(red: 0.2, green: 0.5, blue: 0.4)
-    let dgreen1 = Color(red: 0.1, green: 0.4, blue: 0.3)
-    let dgreen2 = Color(red: 0, green: 0.3, blue: 0.2)
-    let brown = Color.brown
-    let txt1 = Color(red: 0.1, green: 0.25, blue: 0.2)
-    let txt2 = Color(red: 0.05, green: 0.2, blue: 0.15)
-    let obj = Color(red: 0.25, green: 0.15, blue: 0)
+    let red = (col: Color(red: 1.0, green: 0.55, blue: 0.55), img: Image("FlatRedHang"))
+    let yellow = (col: Color(red: 1.0, green: 0.85, blue: 0.55), img: Image("FlatYellowHang"))
+    let green = (col: Color(red: 0.55, green: 1.0, blue: 0.55), img: Image("FlatYellowHang"))
+    let cyan = (col: Color(red: 0.55, green: 1.0, blue: 0.85), img: Image("FlatYellowHang"))
+    let blue = (col: Color(red: 0.55, green: 0.55, blue: 1.0), img: Image("FlatYellowHang"))
+    let pink = (col: Color(red: 1.0, green: 0.55, blue: 0.85), img: Image("FlatYellowHang"))
 }
+
 
 struct Sizing: DynamicProperty {
     @ScaledMetric var x1: CGFloat = 5
@@ -148,5 +147,26 @@ public struct setStyle: ButtonStyle {
                 .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
                 .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
         }
+    }
+}
+
+extension Color {
+    func adjusted(saturation: Double = 1.0, brightness: Double = 0.0) -> Color {
+        #if os(iOS)
+        Color(uiColor: UIColor { traits in
+            let resolved = UIColor(self).resolvedColor(with: traits)
+            var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            
+            guard resolved.getHue(&h, saturation: &s, brightness: &b, alpha: &a) else {
+                return resolved
+            }
+            
+            let newS = min(max(s * saturation, 0), 1)
+            let newB = min(max(b + brightness, 0), 1)
+            return UIColor(hue: h, saturation: newS, brightness: newB, alpha: a)
+        })
+        #else
+        self
+        #endif
     }
 }

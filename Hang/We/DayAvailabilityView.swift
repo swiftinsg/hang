@@ -24,7 +24,7 @@ private struct PersonalBusyItem: Identifiable {
 }
 
 struct DayAvailabilityView: View {
-    var colors = Colors()
+    // rip Colors() struct
     let date: Date
     /// Firestore group document ID, used to read this group's shared busy times.
     var groupID: String = ""
@@ -206,7 +206,7 @@ struct DayAvailabilityView: View {
                     entries: [
                         CalendarLegendEntry(
                             title: "Free Days",
-                            fill: colors.green.opacity(0.2)
+                            fill: .green.adjusted(saturation: 0.5, brightness: -0.07).opacity(0.2)
                         ),
                         CalendarLegendEntry(
                             title: "Recommended Days",
@@ -216,7 +216,7 @@ struct DayAvailabilityView: View {
                         ),
                         CalendarLegendEntry(
                             title: "Your calendar Entries",
-                            fill: colors.dgreen.opacity(0.75)
+                            fill: .green.adjusted(saturation: 0.75, brightness: -0.25).opacity(0.75)
                         ),
                         CalendarLegendEntry(
                             title: "Group Event",
@@ -325,7 +325,7 @@ struct DayAvailabilityView: View {
 
         ZStack(alignment: .topLeading) {
             // A member who hasn't shared is not silently shown as free.
-            colors.green.opacity(status == .sharing ? 0.12 : 0.03)
+            Color.green.adjusted(saturation: 0.5, brightness: -0.07).opacity(status == .sharing ? 0.12 : 0.03)
 
             if isCurrentUser {
                 // Your own events stay on this device; only you see the titles.
@@ -452,10 +452,10 @@ struct DayAvailabilityView: View {
         let cornerRadius = min(8, barWidth / 3)
 
         let block = RoundedRectangle(cornerRadius: cornerRadius)
-            .fill(colors.dgreen.opacity(0.75))
+            .fill(.green.adjusted(saturation: 0.75, brightness: -0.25).opacity(0.75))
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(colors.dgreen, lineWidth: 1)
+                    .strokeBorder(.green.adjusted(saturation: 0.75, brightness: -0.25), lineWidth: 1)
             }
             .overlay(alignment: .topLeading) {
                 if barHeight > 20 {

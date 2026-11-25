@@ -14,7 +14,7 @@ enum EventRepeatMode: String, CaseIterable, Identifiable {
 struct CreatePersonalEventView: View {
     @Environment(\.dismiss) private var dismiss
 
-    var colors = Colors()
+    // rip Colors() struct
     @Binding var events: [GroupEvents]
 
     /// Called with the events that were just created so they can be persisted.
@@ -320,7 +320,7 @@ struct CreatePersonalEventView: View {
 struct RepeatDatePickerView: View {
     @Environment(\.dismiss) private var dismiss
 
-    var colors = Colors()
+    // rip Colors() struct
 
     /// The event's own start date. It is always part of the series and can't
     /// be deselected.
@@ -483,7 +483,7 @@ struct RepeatDatePickerView: View {
                 )
                 .background(
                     Circle()
-                        .fill(isSelected ? colors.dgreen : Color.clear)
+                        .fill(isSelected ? .green.adjusted(saturation: 0.75, brightness: -0.25) : Color.clear)
                 )
                 .overlay {
                     if calendar.isDateInToday(date) && !isSelected {

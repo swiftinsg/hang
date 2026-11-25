@@ -11,7 +11,7 @@ import SwiftUI
 struct EditEventView: View {
     @Environment(\.dismiss) private var dismiss
 
-    var colors = Colors()
+    // rip Colors() struct
     @Binding var events: [GroupEvents]
     let eventID: UUID
 

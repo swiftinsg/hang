@@ -3,7 +3,7 @@ import SwiftUI
 struct CreateEventView: View {
     @Environment(\.dismiss) private var dismiss
 
-    var colors = Colors()
+    // rip Colors() struct
     @Binding var tg: TestGroup
 
     @State private var eventName = ""

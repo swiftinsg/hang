@@ -25,7 +25,7 @@ public enum GroupTab: String, CaseIterable, Identifiable {
 
 struct GroupView: View {
     var sizing = Sizing()
-    var colors = Colors()
+    // rip Colors() struct
     @Binding var tg: TestGroup
     @State private var selectedGroupTab: GroupTab = .events
     @State private var availabilityStore = AvailabilityStore.shared
@@ -112,7 +112,7 @@ struct GroupView: View {
 
 struct CalendarView: View {
     var sizing = Sizing()
-    var colors = Colors()
+    // rip Colors() struct
     @Binding var tg: TestGroup
 
     private let calendar: Calendar = {
@@ -412,7 +412,7 @@ struct CalendarView: View {
                     } else {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(
-                                colors.green.opacity(
+                                .green.adjusted(saturation: 0.5, brightness: -0.07).opacity(
                                     isCurrentMonth ? shading : shading * 0.4
                                 )
                             )
@@ -464,7 +464,7 @@ struct CalendarView: View {
                 .overlay {
                     if isSelected {
                         RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(colors.dgreen, lineWidth: 2.5)
+                            .strokeBorder(Color.accentColor, lineWidth: 2.5)
                     }
                 }
         }
@@ -513,7 +513,7 @@ struct CalendarView: View {
 
 // Shared floating "New event" button used by both the Calendar and Events tabs.
 struct NewGroupEventButton: View {
-    var colors = Colors()
+    // rip Colors() struct
     var action: () -> Void
 
     var body: some View {
@@ -521,7 +521,7 @@ struct NewGroupEventButton: View {
             .font(.title2.weight(.semibold))
             .buttonStyle(.glassProminent)
             .controlSize(.large)
-            .tint(colors.dgreen)
+            .tint(Color.accentColor)
             .padding(.horizontal, 32)
             .buttonBorderShape(.circle)
     }
@@ -531,7 +531,7 @@ struct EventView: View {
     @Binding var tg: TestGroup
     var size : CGSize
     var sizing = Sizing()
-    var colors = Colors()
+    // rip Colors() struct
     @State private var showAddView = false
     @State private var activeSheet: GroupCalendarSheet?
 
@@ -653,7 +653,7 @@ struct EventView: View {
 
 struct MoreInfoView: View {
     var sizing = Sizing()
-    var colors = Colors()
+    // rip Colors() struct
     @Binding var tg: TestGroup
     @Environment(\.dismiss) private var dismiss
 
