@@ -33,6 +33,9 @@ public struct TestGroup: Hashable, Identifiable {
     var desc: String
     var members: [Person]
     var events: [GroupEvents]
+    /// Colour shared by this group's events. Randomised when the group is
+    /// created and editable from the group's More Info screen.
+    var eventColor: PersonalEventOutlineColor = .blue
     /// Firestore document ID (`groups/<documentID>`). Empty for locally
     /// created groups that haven't been saved to Firestore yet.
     let documentID: String
@@ -44,6 +47,7 @@ public struct TestGroup: Hashable, Identifiable {
         desc: String = "Add description here...",
         members: [Person] = [],
         events: [GroupEvents] = [],
+        eventColor: PersonalEventOutlineColor = .blue,
         documentID: String = ""
     ) {
         self.id = id
@@ -52,6 +56,7 @@ public struct TestGroup: Hashable, Identifiable {
         self.desc = desc
         self.members = members
         self.events = events
+        self.eventColor = eventColor
         self.documentID = documentID
     }
 }
@@ -65,6 +70,10 @@ public struct GroupEvents: Hashable, Identifiable {
     var time: Double
     /// Optional end time. Events created before this was added only store a start.
     var endTime: Double? = nil
+    /// Display-only colour inherited from the group this event came from.
+    /// Personal events leave it nil and use the device-local colour choice.
+    /// It is never written to Firestore: `GroupEventData` owns the wire format.
+    var groupColor: Color? = nil
 
     /// `id` can be supplied so events loaded from Firestore keep the same
     /// identity across refreshes (the document ID is stored as a UUID).
@@ -74,7 +83,8 @@ public struct GroupEvents: Hashable, Identifiable {
         desc: String = "Add description here...",
         location: String = "",
         time: Double,
-        endTime: Double? = nil
+        endTime: Double? = nil,
+        groupColor: Color? = nil
     ) {
         self.id = id
         self.name = name
@@ -82,6 +92,7 @@ public struct GroupEvents: Hashable, Identifiable {
         self.location = location
         self.time = time
         self.endTime = endTime
+        self.groupColor = groupColor
     }
 }
 

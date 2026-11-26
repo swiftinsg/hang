@@ -47,13 +47,14 @@ service cloud.firestore {
       return after.inviteCode == before.inviteCode
         && after.name == before.name
         && after.desc == before.desc
+        && after.get('eventColor', '') == before.get('eventColor', '')
         && after.keys().hasOnly(
              ['inviteCode', 'name', 'desc', 'people',
-              'memberNames', 'memberProfilePictures']
+              'memberNames', 'memberProfilePictures', 'eventColor']
            )
         && before.keys().hasOnly(
              ['inviteCode', 'name', 'desc', 'people',
-              'memberNames', 'memberProfilePictures']
+              'memberNames', 'memberProfilePictures', 'eventColor']
            );
     }
 
@@ -73,8 +74,11 @@ service cloud.firestore {
       return hasGroupBasics(data)
         && data.keys().hasOnly(
              ['inviteCode', 'name', 'desc', 'people',
-              'memberNames', 'memberProfilePictures']
+              'memberNames', 'memberProfilePictures', 'eventColor']
            )
+        && data.get('eventColor', '') is string
+        && data.get('eventColor', '').size() > 0
+        && data.get('eventColor', '').size() <= 16
         && data.people == [selfRef()]
         && data.get('memberNames', {}).keys().hasOnly([request.auth.uid])
         && data.get('memberProfilePictures', {}).keys().hasOnly([request.auth.uid]);
@@ -143,6 +147,38 @@ service cloud.firestore {
              request.auth.uid);
     }
 
+    // A member changing the colour used for this group's shared events.
+    function validGroupColorChange() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return hasGroupBasics(before)
+        && hasGroupBasics(after)
+        && scalarGroupFieldsUnchangedIgnoringColor(before, after)
+        && after.diff(before).affectedKeys().hasOnly(['eventColor'])
+        && after.eventColor is string
+        && after.eventColor.size() > 0
+        && after.eventColor.size() <= 16;
+    }
+
+    // Same shape as scalarGroupFieldsUnchanged, but allows only eventColor.
+    function scalarGroupFieldsUnchangedIgnoringColor(before, after) {
+      return after.inviteCode == before.inviteCode
+        && after.name == before.name
+        && after.desc == before.desc
+        && after.people == before.people
+        && after.get('memberNames', {}) == before.get('memberNames', {})
+        && after.get('memberProfilePictures', {})
+             == before.get('memberProfilePictures', {})
+        && after.keys().hasOnly(
+             ['inviteCode', 'name', 'desc', 'people',
+              'memberNames', 'memberProfilePictures', 'eventColor']
+           )
+        && before.keys().hasOnly(
+             ['inviteCode', 'name', 'desc', 'people',
+              'memberNames', 'memberProfilePictures', 'eventColor']
+           );
+    }
+
     // Account deletion may erase only the caller's stale entries from groups
     // they are no longer in (AccountDeletionController).
     function validStaleSelfCleanup() {
@@ -206,6 +242,7 @@ service cloud.firestore {
         || validSelfExit()
         || validStaleSelfCleanup()
         || (isGroupMember(groupID) && validMemberProfileRefresh())
+        || (isGroupMember(groupID) && validGroupColorChange())
       );
 
       // Groups are shared history; no client flow deletes a group document.
@@ -241,9 +278,13 @@ service cloud.firestore {
 
         allow read: if isGroupMember(groupID);
 
+        // Only the owner may publish their own busy times. Membership is
+        // intentionally not re-checked here: a live group write and the group
+        // listener can race, and a failed sync used to surface as
+        // "missing or insufficient permission". Reads above remain member-only,
+        // so this does not expose anyone's intervals to non-members.
         allow create, update: if signedIn()
           && request.auth.uid == uid
-          && isGroupMember(groupID)
           && validPayload();
 
         // Works after leaving / during account deletion.

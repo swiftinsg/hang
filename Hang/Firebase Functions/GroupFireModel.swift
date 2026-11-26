@@ -10,6 +10,7 @@
 
 import FirebaseFirestore
 import Foundation
+import SwiftUI
 
 /// A group as it is stored in Firestore.
 struct GroupData: Codable {
@@ -27,6 +28,9 @@ struct GroupData: Codable {
     /// uid → profile picture raw value, copied in alongside `memberNames` so
     /// every member can render avatars without reading private user documents.
     var memberProfilePictures: [String: String] = [:]
+    /// Raw value of the palette colour used for this group's shared events.
+    /// Older groups without it get a stable colour derived from their ID.
+    var eventColor: String = ""
 
     init(
         inviteCode: String,
@@ -34,7 +38,8 @@ struct GroupData: Codable {
         desc: String,
         people: [DocumentReference],
         memberNames: [String: String] = [:],
-        memberProfilePictures: [String: String] = [:]
+        memberProfilePictures: [String: String] = [:],
+        eventColor: String = ""
     ) {
         self.inviteCode = inviteCode
         self.name = name
@@ -42,6 +47,7 @@ struct GroupData: Codable {
         self.people = people
         self.memberNames = memberNames
         self.memberProfilePictures = memberProfilePictures
+        self.eventColor = eventColor
     }
 
     /// Older groups were saved without `memberNames` or `memberProfilePictures`.
@@ -61,10 +67,13 @@ struct GroupData: Codable {
                 [String: String].self,
                 forKey: .memberProfilePictures
             ) ?? [:]
+        eventColor =
+            try container.decodeIfPresent(String.self, forKey: .eventColor) ?? ""
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, inviteCode, name, desc, people, memberNames, memberProfilePictures
+        case id, inviteCode, name, desc, people, memberNames,
+             memberProfilePictures, eventColor
     }
 
     /// Rebuilds the in-app group. The Firestore document ID becomes the group's
@@ -105,13 +114,27 @@ struct GroupData: Codable {
             if !trimmed.isEmpty { current.avatarName = trimmed }
         }
 
+        // Groups saved before the colour feature have no `eventColor`. Give
+        // them a stable one so their events still render consistently, and
+        // tag every event with it for the personal calendar's mini bar.
+        let resolvedColor =
+            PersonalEventOutlineColor(rawValue: eventColor)
+            ?? .stableColor(forID: documentID)
+        let resolvedSwiftUIColor = resolvedColor.color ?? .blue
+        let coloredEvents = events.map { event -> GroupEvents in
+            var colored = event
+            colored.groupColor = resolvedSwiftUIColor
+            return colored
+        }
+
         return TestGroup(
             id: UUID(uuidString: documentID) ?? UUID(),
             code: inviteCode,
             name: name,
             desc: desc,
             members: [current] + otherMembers,
-            events: events,
+            events: coloredEvents,
+            eventColor: resolvedColor,
             documentID: documentID
         )
     }

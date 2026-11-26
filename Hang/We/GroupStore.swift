@@ -12,6 +12,7 @@ import FirebaseAuth
 import FirebaseFirestore
 import Foundation
 import Observation
+import SwiftUI
 
 @Observable
 final class GroupStore {
@@ -83,6 +84,7 @@ final class GroupStore {
 
                     await MainActor.run {
                         self.groups = loaded
+                        self.syncEventListeners(for: loaded)
                         self.errorMessage = nil
                     }
                 }
@@ -121,10 +123,8 @@ final class GroupStore {
             )
 
             groups = loaded
+            syncEventListeners(for: loaded)
             errorMessage = nil
-            for group in loaded {
-                startListeningToEvents(for: group)
-            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -160,7 +160,8 @@ final class GroupStore {
             desc: desc,
             people: [userDocument],
             memberNames: profile.username.isEmpty ? [:] : [uid: profile.username],
-            memberProfilePictures: [uid: profile.picture.rawValue]
+            memberProfilePictures: [uid: profile.picture.rawValue],
+            eventColor: PersonalEventOutlineColor.randomGroupColor.rawValue
         )
 
         let batch = db.batch()
@@ -170,6 +171,42 @@ final class GroupStore {
             forDocument: userDocument
         )
         try await batch.commit()
+    }
+
+    /// Persists the colour used by this group's shared events. Any member can
+    /// change it from More Info; the group listener then updates everyone's
+    /// local copy, including the colour attached to each loaded event.
+    func setEventColor(_ color: PersonalEventOutlineColor, for group: TestGroup) async {
+        guard !group.documentID.isEmpty else {
+            await MainActor.run {
+                self.errorMessage = GroupStoreError.groupNotSaved.errorDescription
+            }
+            return
+        }
+
+        do {
+            try await groupsCollection
+                .document(group.documentID)
+                .updateData(["eventColor": color.rawValue])
+
+            await MainActor.run {
+                guard let index = self.groups.firstIndex(where: {
+                    $0.documentID == group.documentID
+                }) else { return }
+                self.groups[index].eventColor = color
+                let swiftUIColor = color.color ?? .blue
+                self.groups[index].events = self.groups[index].events.map { event in
+                    var colored = event
+                    colored.groupColor = swiftUIColor
+                    return colored
+                }
+                self.errorMessage = nil
+            }
+        } catch {
+            await MainActor.run {
+                self.errorMessage = error.localizedDescription
+            }
+        }
     }
 
     /// Generates a 6-letter invite code that isn't already in use.
@@ -368,7 +405,14 @@ final class GroupStore {
                     }) else {
                         return
                     }
-                    self.groups[index].events = events
+                    // Keep the group's display colour on each event so the
+                    // personal calendar can tint every group's mini-bar bar.
+                    let groupColor = self.groups[index].eventColor.color ?? .blue
+                    self.groups[index].events = events.map { event in
+                        var colored = event
+                        colored.groupColor = groupColor
+                        return colored
+                    }
                 }
             }
     }
@@ -376,6 +420,21 @@ final class GroupStore {
     /// Stops listening to one group's shared events.
     func stopListeningToEvents(for documentID: String) {
         eventListeners.removeValue(forKey: documentID)?.remove()
+    }
+
+    /// Keeps one live event listener per group the user still belongs to. The
+    /// personal calendar reads events from every group, not just the first one
+    /// the user happens to open, so all of them must stay live.
+    @MainActor
+    private func syncEventListeners(for groups: [TestGroup]) {
+        let liveIDs = Set(groups.map(\.documentID).filter { !$0.isEmpty })
+
+        for documentID in Array(eventListeners.keys) where !liveIDs.contains(documentID) {
+            stopListeningToEvents(for: documentID)
+        }
+        for group in groups where !group.documentID.isEmpty {
+            startListeningToEvents(for: group)
+        }
     }
 
     // MARK: - Helpers

@@ -28,6 +28,10 @@ final class AvailabilityStore {
     private(set) var errorMessage: String?
 
     @ObservationIgnored private var listeners: [String: ListenerRegistration] = [:]
+    /// Groups the UI currently wants to watch, so a listener denied while a
+    /// join is still propagating can be retried once membership lands.
+    @ObservationIgnored private var desiredGroupIDs: Set<String> = []
+    @ObservationIgnored private var retryAttempts: [String: Int] = [:]
 
     /// Resolved lazily so a preview store can exist without a Firebase app.
     private var db: Firestore { Firestore.firestore() }
@@ -39,6 +43,7 @@ final class AvailabilityStore {
     /// Brings the live listeners in line with the visible groups.
     func sync(groupIDs: [String]) {
         let live = Set(groupIDs)
+        desiredGroupIDs = live
 
         for key in Array(listeners.keys) where !live.contains(key) {
             stop(groupID: key)
@@ -59,7 +64,15 @@ final class AvailabilityStore {
                 guard let self else { return }
 
                 if let error {
-                    Task { @MainActor in self.errorMessage = error.localizedDescription }
+                    Task { @MainActor in
+                        self.errorMessage = error.localizedDescription
+                        // Rules check group membership. Right after joining,
+                        // the group write and the listener can race; drop the
+                        // failed registration so it can be retried.
+                        self.listeners[groupID]?.remove()
+                        self.listeners[groupID] = nil
+                        self.retryAvailabilityListener(for: groupID)
+                    }
                     return
                 }
                 guard let snapshot else { return }
@@ -72,12 +85,32 @@ final class AvailabilityStore {
                 Task { @MainActor in
                     self.byGroup[groupID] = members
                     self.errorMessage = nil
+                    self.retryAttempts[groupID] = nil
                 }
             }
     }
 
+    /// Retries a denied availability listener a few times with backoff. Once
+    /// the group membership write is visible to the rules engine, the same
+    /// listener succeeds without any user action.
+    @MainActor
+    private func retryAvailabilityListener(for groupID: String) {
+        guard desiredGroupIDs.contains(groupID) else { return }
+        let attempt = (retryAttempts[groupID] ?? 0) + 1
+        guard attempt <= 3 else { return }
+        retryAttempts[groupID] = attempt
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(Double(attempt)))
+            guard self.desiredGroupIDs.contains(groupID),
+                  self.listeners[groupID] == nil else { return }
+            self.listen(groupID: groupID)
+        }
+    }
+
     func stop(groupID: String) {
         listeners.removeValue(forKey: groupID)?.remove()
+        retryAttempts[groupID] = nil
         byGroup[groupID] = nil
     }
 
@@ -85,6 +118,9 @@ final class AvailabilityStore {
         for key in Array(listeners.keys) {
             listeners.removeValue(forKey: key)?.remove()
         }
+        listeners = [:]
+        desiredGroupIDs = []
+        retryAttempts = [:]
         byGroup = [:]
     }
 

@@ -25,6 +25,7 @@ Firestore
         ├── people: [DocumentReference]
         ├── memberNames: { uid: username, ... }  // display names shared with the group
         ├── memberProfilePictures: { uid: picture, ... }  // avatars shared with the group; values match profilePicture above
+        ├── eventColor: String  // PersonalEventOutlineColor raw value; colour for all this group's events
         ├── events (subcollection)
         │   └── eventID (document)
         │       ├── name: String

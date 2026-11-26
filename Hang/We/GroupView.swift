@@ -128,8 +128,15 @@ struct CalendarView: View {
     @State private var personalStore = PersonalEventsStore.shared
     @State private var availabilityStore = AvailabilityStore.shared
     @State private var availabilityPublisher = AvailabilityPublisher.shared
+    /// Personal event colours stay on this device, including in the shared
+    /// calendar's "You" column.
+    @AppStorage(PersonalEventColors.storageKey) private var colorsJSON: String = PersonalEventColors.emptyJSON
 
     private var members: [Person] { tg.members }
+
+    private var storedColors: Binding<[String: String]> {
+        PersonalEventColors.binding($colorsJSON)
+    }
 
     private var availability: AvailabilityCalculator {
         AvailabilityCalculator(
@@ -253,6 +260,8 @@ struct CalendarView: View {
                     groupEvents: tg.events,
                     personalEvents: personalStore.events,
                     importedEvents: calendarStore.events,
+                    storedColors: storedColors,
+                    groupColor: tg.eventColor.color ?? .blue,
                     onEditGroupEvent: { event in
                         activeSheet = .edit(event)
                     }
@@ -683,6 +692,28 @@ struct MoreInfoView: View {
                     }
                     .padding(.leading, 8)
                 }
+            }
+            .listRowBackground(Color(.secondarySystemBackground))
+
+            Section("Event Color") {
+                EventColorPicker(
+                    selection: Binding(
+                        get: { tg.eventColor },
+                        set: { newColor in
+                            tg.eventColor = newColor
+                            Task {
+                                await GroupStore.shared.setEventColor(
+                                    newColor,
+                                    for: tg
+                                )
+                            }
+                        }
+                    ),
+                    includeAutomatic: false
+                )
+                Text("All events from this group use this color.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .listRowBackground(Color(.secondarySystemBackground))
 

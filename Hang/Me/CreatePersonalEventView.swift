@@ -26,6 +26,10 @@ struct CreatePersonalEventView: View {
     @State private var startDate: Date
     @State private var endDate: Date
 
+    /// Local-only colour for every event created by this form.
+    @AppStorage(PersonalEventColors.storageKey) private var colorsJSON: String = PersonalEventColors.emptyJSON
+    @State private var chosenColor: PersonalEventOutlineColor = .automatic
+
     @State private var repeatMode: EventRepeatMode = .never
     @State private var repeatUntil: Date
     @State private var customRepeatDates: Set<Date> = []
@@ -120,6 +124,10 @@ struct CreatePersonalEventView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                Section("Color") {
+                    EventColorPicker(selection: $chosenColor)
+                }
             }
             .navigationTitle("New Event")
             .navigationBarTitleDisplayMode(.inline)
@@ -189,6 +197,10 @@ struct CreatePersonalEventView: View {
                 )
             }
         }
+    }
+
+    private var storedColors: Binding<[String: String]> {
+        PersonalEventColors.binding($colorsJSON)
     }
 
     private var canSave: Bool {
@@ -299,6 +311,17 @@ struct CreatePersonalEventView: View {
                     .timeIntervalSince1970
             )
         }
+
+        // Colour every occurrence the same way, locally on this device.
+        var stored = storedColors.wrappedValue
+        for event in created {
+            PersonalEventColors.setChoice(
+                chosenColor,
+                in: &stored,
+                for: PersonalEventColorKey.personal(event.id)
+            )
+        }
+        storedColors.wrappedValue = stored
 
         events.append(contentsOf: created)
 

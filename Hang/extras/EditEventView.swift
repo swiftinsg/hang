@@ -14,6 +14,8 @@ struct EditEventView: View {
     // rip Colors() struct
     @Binding var events: [GroupEvents]
     let eventID: UUID
+    /// Present only for personal events. Group events use the group's colour.
+    let colorKey: String?
 
     /// Called after an edit is saved so the change can be persisted.
     var onSave: ((GroupEvents) -> Void)? = nil
@@ -27,14 +29,20 @@ struct EditEventView: View {
     @State private var endDate: Date
     @State private var isConfirmingDelete = false
 
+    /// Local-only colour choice, stored in AppStorage on this device.
+    @AppStorage(PersonalEventColors.storageKey) private var colorsJSON: String = PersonalEventColors.emptyJSON
+    @State private var chosenColor: PersonalEventOutlineColor = .automatic
+
     init(
         events: Binding<[GroupEvents]>,
         eventID: UUID,
+        colorKey: String? = nil,
         onSave: ((GroupEvents) -> Void)? = nil,
         onDelete: ((UUID) -> Void)? = nil
     ) {
         _events = events
         self.eventID = eventID
+        self.colorKey = colorKey
         self.onSave = onSave
         self.onDelete = onDelete
 
@@ -47,6 +55,11 @@ struct EditEventView: View {
             initialValue: event?.endDate
                 ?? Date().addingTimeInterval(60 * 60)
         )
+        _chosenColor = State(
+            initialValue: colorKey.map {
+                PersonalEventColors.storedChoice(forKey: $0)
+            } ?? .automatic
+        )
     }
 
     var body: some View {
@@ -56,6 +69,12 @@ struct EditEventView: View {
                     TextField("Name", text: $eventName)
                     TextField("Description", text: $eventDesc, axis: .vertical)
                     TextField("Location (optional)", text: $eventLocation)
+                }
+
+                if colorKey != nil {
+                    Section("Color") {
+                        EventColorPicker(selection: $chosenColor)
+                    }
                 }
 
                 Section("Date and Time") {
@@ -115,6 +134,10 @@ struct EditEventView: View {
         }
     }
 
+    private var storedColors: Binding<[String: String]> {
+        PersonalEventColors.binding($colorsJSON)
+    }
+
     private var canSave: Bool {
         !eventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && endDate > startDate
@@ -139,11 +162,31 @@ struct EditEventView: View {
         )
         events[index].time = startDate.timeIntervalSince1970
         events[index].endTime = endDate.timeIntervalSince1970
+
+        if let colorKey {
+            var stored = storedColors.wrappedValue
+            PersonalEventColors.setChoice(
+                chosenColor,
+                in: &stored,
+                for: colorKey
+            )
+            storedColors.wrappedValue = stored
+        }
+
         onSave?(events[index])
         dismiss()
     }
 
     private func deleteEvent() {
+        if let colorKey {
+            var stored = storedColors.wrappedValue
+            PersonalEventColors.setChoice(
+                .automatic,
+                in: &stored,
+                for: colorKey
+            )
+            storedColors.wrappedValue = stored
+        }
         onDelete?(eventID)
         events.removeAll { $0.id == eventID }
         dismiss()

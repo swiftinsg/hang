@@ -18,6 +18,9 @@ private struct PersonalBusyItem: Identifiable {
     let title: String
     let start: Date
     let end: Date
+    /// Key into the device-local colour map, so this block matches the colour
+    /// shown on the month grid and in the day event list.
+    let colorKey: String
     /// Set only for events created in Hang, so the personal calendar can open
     /// them for editing. Imported device-calendar events stay read only.
     let personalEvent: GroupEvents?
@@ -33,6 +36,12 @@ struct DayAvailabilityView: View {
     var groupEvents: [GroupEvents] = []
     var personalEvents: [GroupEvents] = []
     var importedEvents: [PersonalCalendarEvent] = []
+
+    /// Device-local event colours, so the bars match the month grid's line
+    /// segments and event list. Never written to Firestore.
+    var storedColors: Binding<[String: String]> = .constant([:])
+    /// Colour shared by this group's events, chosen in the group's More Info.
+    var groupColor: Color = .blue
 
     /// Called when a group event block is tapped. Personal events stay read
     /// only in the shared calendar.
@@ -100,6 +109,7 @@ struct DayAvailabilityView: View {
                 title: event.name,
                 start: event.startDate,
                 end: event.endDate,
+                colorKey: PersonalEventColorKey.personal(event.id),
                 personalEvent: event
             )
         }
@@ -109,6 +119,7 @@ struct DayAvailabilityView: View {
                 title: event.title,
                 start: event.startDate,
                 end: event.endDate,
+                colorKey: PersonalEventColorKey.imported(event.id),
                 personalEvent: nil
             )
         }
@@ -427,12 +438,17 @@ struct DayAvailabilityView: View {
         let barWidth = max(columnWidth - 10, 6)
         let barHeight = max(4, CGFloat(durationHours) * hourHeight - 1)
         let cornerRadius = min(8, barWidth / 3)
+        let color = PersonalEventColors.color(
+            in: storedColors.wrappedValue,
+            for: item.colorKey,
+            default: .gray
+        )
 
         let block = RoundedRectangle(cornerRadius: cornerRadius)
-            .fill(.green.adjusted(saturation: 0.75, brightness: -0.25).opacity(0.75))
+            .fill(color.opacity(0.75))
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(.green.adjusted(saturation: 0.75, brightness: -0.25), lineWidth: 1)
+                    .strokeBorder(color, lineWidth: 1)
             }
             .overlay(alignment: .topLeading) {
                 if barHeight > 20 {
@@ -465,13 +481,14 @@ struct DayAvailabilityView: View {
         )
     }
 
-    /// One orange band per group event, spanning every member column.
+    /// One band per group event, tinted with that group's chosen colour.
     private func groupEventBands(contentWidth: CGFloat) -> some View {
         ForEach(timedGroupEvents) { event in
             groupEventBand(
                 start: eventStart(event),
                 end: eventEnd(event),
                 title: event.name,
+                color: event.groupColor ?? groupColor,
                 contentWidth: contentWidth,
                 onTap: {
                     onEditGroupEvent?(event)
@@ -484,6 +501,7 @@ struct DayAvailabilityView: View {
         start: Date,
         end: Date,
         title: String,
+        color: Color,
         contentWidth: CGFloat,
         onTap: (() -> Void)? = nil
     ) -> some View {
@@ -494,18 +512,18 @@ struct DayAvailabilityView: View {
         let bandHeight = max(18, CGFloat(durationHours) * hourHeight - 1)
 
         let band = RoundedRectangle(cornerRadius: 6)
-            .fill(Color.blue.opacity(0.15))
+            .fill(color.opacity(0.15))
             .overlay {
                 RoundedRectangle(cornerRadius: 6)
                     .strokeBorder(
-                        Color.blue,
+                        color,
                         style: StrokeStyle(lineWidth: 1.5, dash: [4, 2])
                     )
             }
             .overlay(alignment: .topLeading) {
                 Text(title)
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(color)
                     .lineLimit(1)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
