@@ -693,6 +693,7 @@ struct MoreInfoView: View {
                         Image(systemName: isFilled ? "checkmark" : "doc.on.doc")
                             .contentTransition(.symbolEffect(.replace))
                     }
+                    .padding(.leading, 8)
                 }
             }
             .listRowBackground(Color(.secondarySystemBackground))

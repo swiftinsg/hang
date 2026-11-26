@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct WeView: View {
-    var sizing = Sizing()
-    // rip Colors() struct
     @State var searchQuery = ""
     @State var countPicker: Int = 0
     @State private var store = GroupStore.shared
@@ -23,7 +21,7 @@ struct WeView: View {
     }
 
     let columns = [
-        GridItem(.adaptive(minimum: 150))
+        GridItem(.adaptive(minimum: 150), spacing: 16)
     ]
     @FocusState var isFocused: Bool
 
@@ -33,7 +31,7 @@ struct WeView: View {
         NavigationStack {
             ScrollView {
                 VStack {
-                    LazyVGrid(columns: columns, spacing: sizing.x1) {
+                    LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(results) { tg in
                             if let index = store.groups.firstIndex(where: {
                                 $0.id == tg.id
@@ -92,53 +90,56 @@ struct WeView: View {
 }
 
 struct GroupCard: View {
-    var sizing = Sizing()
-    // rip Colors() struct
     let tg: TestGroup
     let members: [Person]
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(
-                    Color(
-                        red: Double.random(in: 0.35...0.45),
-                        green: Double.random(in: 0.6...0.7),
-                        blue: Double.random(in: 0.4...0.5)
-                    )
-                )
-                .aspectRatio(1, contentMode: .fit)
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(.accent.mix(with: .white, by: 0.25))
+                .shadow(color: .black.opacity(0.15), radius: 16)
+            //                .fill(Color(.secondarySystemBackground))
+            //                .shadow(color: Color(.systemGray4), radius: 16)
             VStack(alignment: .leading, spacing: 16) {
                 Text(tg.name)
                     .font(.title3)
                     .bold()
                     .lineLimit(2)
-                    .padding(.bottom, -sizing.x1)
-                HStack(spacing: 4) {
-                    Image(systemName: "person.2.fill")
-                        .font(.subheadline)
-                    Text(String(tg.members.count))
-                        .font(.headline)
-                        .fontWeight(.medium)
-                }
+                    .padding(.bottom, -4)
+                Text(
+                    "\(tg.members.count) member\(tg.members.count != 1 ? "s" : "")"
+                )
+                .foregroundStyle(.secondary)
                 HStack(spacing: -8) {
                     ForEach(Array(tg.members.prefix(5))) { member in
-                            ProfileAvatarView(person: member, size: 32)
+                        ProfileAvatarView(person: member, size: 32)
                             .background(
                                 .background
                             )
-                        .clipShape(.circle)
+                            .clipShape(.circle)
                     }
                 }
             }
-            .padding(.vertical, sizing.x3)
-            .padding(.horizontal, sizing.x4)
+            .padding(24)
+            .frame(
+                maxWidth: .infinity,
+                alignment: .leading
+            )
         }
-        .padding(5)
     }
 }
 
 #Preview {
-    WeView()
+    //    WeView()
+    GroupCard(
+        tg: TestGroup(
+            code: "CODZEE",
+            name: "CODZEE hahaha ahaodhuau oiwhdsa do",
+            desc: "hang",
+            members: [Person(name: "e", profilePicture: .derpyAlien)],
+            events: [],
+            documentID: ""
+        ),
+        members: []
+    )
+    .frame(width: 200, height: 200)
 }
-
-
