@@ -541,19 +541,7 @@ struct EventView: View {
     var body: some View {
         Group {
             if $tg.events.isEmpty {
-                VStack {
-                    Image(systemName: "tray")
-                        .bold()
-                        .foregroundStyle(.secondary)
-                        .font(.largeTitle)
-                        .padding(.bottom, 8)
-                    Text("No Events")
-                        .bold()
-                    Text("Go arrange a hangout with your friends!")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxHeight: .infinity)
+                ContentUnavailableView("No Events", systemImage: "tray", description: Text("Go arrange a hangout with your friends!"))
             } else {
                 List {
                     ForEach($tg.events) { $event in
@@ -708,7 +696,7 @@ struct MoreInfoView: View {
             Section("Members (\(tg.members.count))") {
                 ForEach(tg.members) { member in
                     HStack(spacing: 16) {
-                        ProfileAvatarView(person: member, size: sizing.x8)
+                        ProfileAvatarView(person: member, size: 40)
                         VStack(alignment: .leading) {
                             Text(member.name)
                                 .lineLimit(1)
@@ -723,13 +711,16 @@ struct MoreInfoView: View {
             }
             .listRowBackground(Color(.secondarySystemBackground))
 
-            Button(role: .destructive) {
-                isConfirmingLeave = true
-            } label: {
-                Text("Leave Group")
+            Section("Actions") {
+                Button(role: .destructive) {
+                    isConfirmingLeave = true
+                } label: {
+                    Text("Leave Group")
+                }
+                .buttonStyle(.glass)
+                .tint(.red)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
+            .listRowBackground(Color(.secondarySystemBackground))
         }
         .scrollContentBackground(.hidden)
         .alert(

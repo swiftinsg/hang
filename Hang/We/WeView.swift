@@ -53,6 +53,21 @@ struct WeView: View {
                     )
                 }
             }
+            .overlay {
+                if results.isEmpty {
+                    if searchQuery.isEmpty {
+                        ContentUnavailableView(
+                            "No Groups",
+                            systemImage: "figure.seated.side.right.airbag.on",
+                            description: Text(
+                                "Press + to create or join your first group!"
+                            )
+                        )
+                    } else {
+                        ContentUnavailableView.search
+                    }
+                }
+            }
             .refreshable {
                 await AppReloader.reloadAll()
             }
@@ -129,7 +144,10 @@ struct GroupCard: View {
 }
 
 #Preview {
-    //    WeView()
+    WeView()
+
+    // Preview for GroupCard
+    /*
     GroupCard(
         tg: TestGroup(
             code: "CODZEE",
@@ -142,4 +160,5 @@ struct GroupCard: View {
         members: []
     )
     .frame(width: 200, height: 200)
+    */
 }
