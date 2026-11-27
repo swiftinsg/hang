@@ -321,13 +321,13 @@ struct PersonalCalendarView: View {
         var hasGroupEvents = !groupEventsToday.isEmpty
         var eventsToday = {
             var groupEventTimes: [EventTime] = {
-                groupEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.color) }
+                groupEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor) }
             }()
             groupEventTimes +=  {
-                personalEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.color) }
+                personalEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor) }
             }()
             let personalEventTimes: [EventTime] = {
-                savedEventsToday.compactMap { EventTime(start: $0.startDate.timeIntervalSince1970, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.color) }
+                savedEventsToday.compactMap { EventTime(start: $0.startDate.timeIntervalSince1970, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor) }
             }()
             let sortedTimes = groupEventTimes + personalEventTimes.sorted {
                 if $0.start == $1.start { return $0.dur > $1.dur }
@@ -399,13 +399,13 @@ struct PersonalCalendarView: View {
                 hasGroupEvents = !groupEventsToday.isEmpty
                 eventsToday = {
                     var groupEventTimes: [EventTime] = {
-                        groupEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.color) }
+                        groupEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor) }
                     }()
                     groupEventTimes +=  {
-                        personalEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.color) }
+                        personalEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor) }
                     }()
                     let personalEventTimes: [EventTime] = {
-                        savedEventsToday.compactMap { EventTime(start: $0.startDate.timeIntervalSince1970, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.color) }
+                        savedEventsToday.compactMap { EventTime(start: $0.startDate.timeIntervalSince1970, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor) }
                     }()
                     let sortedTimes = groupEventTimes + personalEventTimes.sorted {
                         if $0.start == $1.start { return $0.dur > $1.dur }
