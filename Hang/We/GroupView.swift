@@ -80,6 +80,14 @@ struct GroupView: View {
                             .padding(.horizontal)
                     }
 
+                    if let message = GroupNotificationStore.shared.errorMessage {
+                        Text("Notification failed: \(message)")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal)
+                    }
+
                     Picker("Picker", selection: $selectedGroupTab) {
                         ForEach(GroupTab.allCases) { gtab in
                             Text(gtab.rawValue)
@@ -329,6 +337,16 @@ struct CalendarView: View {
                     eventID: event.id,
                     onSave: { updatedEvent in
                         GroupStore.shared.updateEvent(updatedEvent, to: tg)
+                        // Save just happened: fan the edit notice out to every
+                        // member, including the editor.
+                        Task {
+                            await GroupNotificationStore.shared.notifyEventEdited(
+                                eventName: updatedEvent.name,
+                                groupName: tg.name,
+                                groupID: tg.documentID,
+                                eventID: updatedEvent.id.uuidString
+                            )
+                        }
                     },
                     onDelete: { eventID in
                         GroupStore.shared.deleteEvent(eventID, from: tg)
@@ -723,6 +741,16 @@ struct EventView: View {
                     eventID: event.id,
                     onSave: { updatedEvent in
                         GroupStore.shared.updateEvent(updatedEvent, to: tg)
+                        // Save just happened: fan the edit notice out to every
+                        // member, including the editor.
+                        Task {
+                            await GroupNotificationStore.shared.notifyEventEdited(
+                                eventName: updatedEvent.name,
+                                groupName: tg.name,
+                                groupID: tg.documentID,
+                                eventID: updatedEvent.id.uuidString
+                            )
+                        }
                     },
                     onDelete: { eventID in
                         GroupStore.shared.deleteEvent(eventID, from: tg)

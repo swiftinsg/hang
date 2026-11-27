@@ -376,18 +376,10 @@ final class GroupStore {
 
     /// Saves changes to an existing group event. It reuses the same write as
     /// `addEvent`, overwriting the document at the event's UUID so every member
-    /// sees the edit through the live listener, then fans an edit notice out to
-    /// every member's notification inbox.
+    /// sees the edit through the live listener. The edit notification is sent
+    /// from the sheet's `onSave` closure alongside this write.
     func updateEvent(_ event: GroupEvents, to group: TestGroup) {
         addEvent(event, to: group)
-        Task {
-            await GroupNotificationStore.shared.notifyEventEdited(
-                eventName: event.name,
-                groupName: group.name,
-                groupID: group.documentID,
-                eventID: event.id.uuidString
-            )
-        }
     }
 
     /// Removes a group event. The live listener reflects the deletion to every

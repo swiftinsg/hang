@@ -12,6 +12,7 @@ import FirebaseFirestore
 import Foundation
 
 @MainActor
+@Observable
 final class GroupNotificationStore {
     static let shared = GroupNotificationStore()
 
@@ -20,6 +21,9 @@ final class GroupNotificationStore {
     private var authHandle: AuthStateDidChangeListenerHandle?
     private var listener: ListenerRegistration?
     private var listeningUID: String?
+    /// Shown on the group screen so a missing alert is diagnosable. The usual
+    /// cause is that the updated firestore.rules have not been deployed.
+    private(set) var errorMessage: String?
     /// Records this device has already shown. Seeded from the first snapshot so
     /// inbox history is not replayed after a launch or a sign-in.
     private var presentedIDs: Set<String> = []
@@ -58,6 +62,9 @@ final class GroupNotificationStore {
                 guard let self else { return }
 
                 if let error {
+                    Task { @MainActor in
+                        self.errorMessage = "Inbox listener: \(error.localizedDescription)"
+                    }
                     print("Group notification listener failed: \(error)")
                     return
                 }
@@ -80,6 +87,7 @@ final class GroupNotificationStore {
 
                     for notice in notices where !self.presentedIDs.contains(notice.id) {
                         self.presentedIDs.insert(notice.id)
+                        print("Showing group notification: \(notice.title)")
                         self.handler.sendNotification(title: notice.title, body: notice.body)
                     }
                 }
@@ -96,12 +104,16 @@ final class GroupNotificationStore {
         eventID: String
     ) async {
         guard !groupID.isEmpty, !AccountDeletionController.shared.isDeleting else { return }
+        errorMessage = nil
 
         do {
             let snapshot = try await db.collection(Path.Firestore.Groups)
                 .document(groupID)
                 .getDocument()
-            guard let group = try? snapshot.data(as: GroupData.self) else { return }
+            guard let group = try? snapshot.data(as: GroupData.self) else {
+                errorMessage = "Could not read the group's member list."
+                return
+            }
 
             let batch = db.batch()
             for member in group.people {
@@ -118,8 +130,10 @@ final class GroupNotificationStore {
                 ], forDocument: inbox.document())
             }
             try await batch.commit()
+            print("Delivered event edit notice to \(group.people.count) member(s)")
         } catch {
             print("Failed to deliver event edit notification: \(error)")
+            errorMessage = error.localizedDescription
         }
     }
 }
