@@ -42,7 +42,7 @@ struct GroupView: View {
                         isRenaming = true
                     } label: {
                         HStack(spacing: 8) {
-                            Text("name")
+                            Text(tg.name)
                                 .font(.largeTitle.bold())
                                 .fontWeight(.bold)
                                 .frame(maxWidth: .infinity, alignment: .leading)
