@@ -546,6 +546,7 @@ struct EventView: View {
     // rip Colors() struct
     @State private var showAddView = false
     @State private var activeSheet: GroupCalendarSheet?
+    let notify = NotificationHandler()
 
     var body: some View {
         Group {
@@ -643,6 +644,8 @@ struct EventView: View {
                     eventID: event.id,
                     onSave: { updatedEvent in
                         GroupStore.shared.updateEvent(updatedEvent, to: tg)
+                        notify.askPermission()
+                        notify.sendNotification(title: "\(event.name) has been edited", body: "\(event.name) in group \(tg.name) has been edited")
                     },
                     onDelete: { eventID in
                         GroupStore.shared.deleteEvent(eventID, from: tg)
