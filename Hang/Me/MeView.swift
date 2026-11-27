@@ -52,6 +52,8 @@ struct MeView: View {
 }
 
 struct PersonalCalendarView: View {
+    var sizing = Sizing()
+    var colors = Colors()
     @Binding var personalEvents: [GroupEvents]
     let groupEvents: [GroupEvents]
     
@@ -292,6 +294,15 @@ struct PersonalCalendarView: View {
             }
         }
     }
+    
+  
+
+    /// The time-positioned capsules are laid out in an HStack, not stacked on
+    /// top of each other, so overlapping events no longer hide one another.
+    /// The whole line is scaled to the available width, then padded on all
+    /// sides so it never touches the cell's edges.
+    
+
     private func dayCell(for date: Date) -> some View {
         let isCurrentMonth = calendar.isDate(
             date,
@@ -446,9 +457,7 @@ struct PersonalCalendarView: View {
                 cellSize = newSize
             }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(calendar.component(.day, from: date))")
-    }
+
     // Floating action button, pinned to the bottom of the screen so it stays
     // reachable while the calendar page is scrolled.
     private var createEventButton: some View {
@@ -466,6 +475,7 @@ struct PersonalCalendarView: View {
         .buttonBorderShape(.circle)
     }
 }
+
 
 struct EventTime: Identifiable, Hashable {
     var id = UUID()
