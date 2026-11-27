@@ -1,14 +1,27 @@
 import SwiftUI
 
 struct colorView: View {
+    @State var screenSize: CGSize = .zero
     var body: some View {
-        VStack {
-            Color(.orange)
-                .padding(-5)
-            Color(HangColors.red.col)
-                .padding(-5)
+        HStack(spacing: 8) {
+            Text("name")
+                .font(.largeTitle.bold())
+                .fontWeight(.bold)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            ZStack{
+                Circle()
+                    .frame(width: screenSize.width*0.1)
+                    .foregroundStyle(.thinMaterial)
+                Image(systemName: "pencil")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                
+            }
+        }.onGeometryChange(for: CGSize.self) { proxy in
+            proxy.size
+        } action: { newSize in
+            screenSize = newSize
         }
-        .ignoresSafeArea()
     }
 }
 

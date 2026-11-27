@@ -218,6 +218,42 @@ final class GroupStore {
         return code
     }
 
+    /// Renames a group. Any member may rename it; Firestore rules allow a
+    /// `name`-only update. Local state is updated optimistically and reverted
+    /// if the write fails; the group listener also re-syncs from Firestore.
+    func renameGroup(_ group: TestGroup, newName: String) async {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.count <= 100, trimmed != group.name else { return }
+
+        guard !group.documentID.isEmpty else {
+            await MainActor.run {
+                self.errorMessage = GroupStoreError.groupNotSaved.errorDescription
+            }
+            return
+        }
+
+        let previousName = group.name
+        await MainActor.run {
+            if let index = self.groups.firstIndex(where: { $0.documentID == group.documentID }) {
+                self.groups[index].name = trimmed
+            }
+        }
+
+        do {
+            try await groupsCollection
+                .document(group.documentID)
+                .updateData(["name": trimmed])
+            await MainActor.run { self.errorMessage = nil }
+        } catch {
+            await MainActor.run {
+                if let index = self.groups.firstIndex(where: { $0.documentID == group.documentID }) {
+                    self.groups[index].name = previousName
+                }
+                self.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
     // MARK: - Joining a group
 
     /// Joins the group with the given invite code. Adds the current user to the

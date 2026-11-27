@@ -30,15 +30,54 @@ struct GroupView: View {
     @State private var selectedGroupTab: GroupTab = .events
     @State private var availabilityStore = AvailabilityStore.shared
     @State var screenSize: CGSize = .zero
+    /// Renaming is offered by tapping the group's title.
+    @State private var isRenaming = false
+    @State private var nameDraft = ""
     var body: some View {
         NavigationStack {
             ZStack {
                 VStack {
-                    Text(tg.name)
-                        .font(.largeTitle.bold())
-                        .fontWeight(.bold)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button {
+                        nameDraft = tg.name
+                        isRenaming = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(tg.name)
+                                .font(.largeTitle.bold())
+                                .fontWeight(.bold)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            ZStack{
+                                Circle()
+                                    .frame(width: screenSize.width*0.1)
+                                    .foregroundStyle(.thinMaterial)
+                                Image(systemName: "pencil")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                
+                            }
+                        }
                         .padding(.horizontal)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Rename group \(tg.name)")
+                    .alert("Rename group", isPresented: $isRenaming) {
+                        TextField("Group name", text: $nameDraft)
+                        Button("Cancel", role: .cancel) {}
+                        Button("Save") {
+                            Task { await GroupStore.shared.renameGroup(tg, newName: nameDraft) }
+                        }
+                    } message: {
+                        Text("Every member sees the new name.")
+                    }
+
+                    if let message = GroupStore.shared.errorMessage {
+                        Text("Rename failed: \(message)")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal)
+                    }
 
                     Picker("Picker", selection: $selectedGroupTab) {
                         ForEach(GroupTab.allCases) { gtab in

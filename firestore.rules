@@ -160,6 +160,19 @@ service cloud.firestore {
         && after.eventColor.size() <= 16;
     }
 
+    // A member renaming the group. Only `name` may change; it stays a
+    // non-empty string, capped at 100 characters, matching the client check.
+    function validGroupRename() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return isGroupMember(resource.id)
+        && hasGroupBasics(after)
+        && after.diff(before).affectedKeys().hasOnly(['name'])
+        && after.name is string
+        && after.name.size() > 0
+        && after.name.size() <= 100;
+    }
+
     // Same shape as scalarGroupFieldsUnchanged, but allows only eventColor.
     function scalarGroupFieldsUnchangedIgnoringColor(before, after) {
       return after.inviteCode == before.inviteCode
@@ -243,6 +256,7 @@ service cloud.firestore {
         || validStaleSelfCleanup()
         || (isGroupMember(groupID) && validMemberProfileRefresh())
         || (isGroupMember(groupID) && validGroupColorChange())
+        || (isGroupMember(groupID) && validGroupRename())
       );
 
       // Groups are shared history; no client flow deletes a group document.
