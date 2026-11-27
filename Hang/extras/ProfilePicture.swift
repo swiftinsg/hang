@@ -17,6 +17,7 @@ enum ProfilePicture: String, Codable, CaseIterable, Identifiable, Hashable {
     case derpyAlien = "derpy alien"
     case hangingHang = "hanginghang"
     case sneepy = "sneepy"
+    case confused = "confused"
 
     var id: String { rawValue }
 
@@ -28,6 +29,7 @@ enum ProfilePicture: String, Codable, CaseIterable, Identifiable, Hashable {
         case .derpyAlien: return "Derpy alien"
         case .hangingHang: return "Hanging hang"
         case .sneepy: return "Sneepy"
+        case .confused: return "Confused"
         }
     }
 

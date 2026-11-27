@@ -58,7 +58,7 @@ struct WeView: View {
                     if searchQuery.isEmpty {
                         ContentUnavailableView(
                             "No Groups",
-                            systemImage: "figure.seated.side.right.airbag.on",
+                            image: "trayHang",
                             description: Text(
                                 "Press + to create or join your first group!"
                             )

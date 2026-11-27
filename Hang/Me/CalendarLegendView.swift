@@ -33,23 +33,49 @@ struct CalendarLegendView: View {
                             .frame(maxHeight: 40) 
                     Text("Me")
                     Spacer()
+                    
                     HStack{
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(.blue, lineWidth: 3)
-                            .fill(.clear)
-                            .frame(width:80, height:70)
-                        Text("If this little guy is there it means you have a group event")
+                        ZStack{
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(.yellow, lineWidth: 3)
+                                .fill(.clear)
+                                .frame(width:80, height:70)
+                            Text("9")
+                            Image("legendFalseBar")
+                                
+                                .offset(y:25)
+                                
+                        }
+                        Text("The bar at the bottom shows your color coded personal events")
                             .font(.caption)
                         
                     }
                     Spacer()
                     HStack{
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(.blue, lineWidth: 3)
-                            .fill(.clear)
-                            .frame(width:80, height:70)
-                        Text("The bar at the bottom shows your color coded personal events")
+                        ZStack{
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(.yellow, lineWidth: 3)
+                                .fill(.clear)
+                                .frame(width:80, height:70)
+                            Text("8")
+                                .offset(y:-10)
+                            
+                            
+                                
+                            Image("legendFalseBar")
+                                
+                                .offset(y:25)
+                            Image(.flatYellowHang)
+                                
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width:50,height:50)
+                                .offset(y:15)
+                        }
+                        Text("If this little guy is there it means you have a group event")
+                            
                             .font(.caption)
+                        
                     }
                     Spacer()
                 }
