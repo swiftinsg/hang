@@ -9,13 +9,21 @@ Firestore
 │       ├── reminderPreference: String  // "none" | "1day" | "2hours"; per-user global reminder for ALL events
 │       ├── profilePicture: String  // "initial" (first letter of username) or a profilePictures asset name
 │       ├── groupsIn: [DocumentReference]
-│       └── calendar (subcollection)
-│           └── entryID (document)
-│               ├── name: String
-│               ├── desc: String
-│               ├── location: String
-│               ├── time: Timestamp
-│               └── endTime: Timestamp
+│       ├── calendar (subcollection)
+│       │   └── entryID (document)
+│       │       ├── name: String
+│       │       ├── desc: String
+│       │       ├── location: String
+│       │       ├── time: Timestamp
+│       │       └── endTime: Timestamp
+│       └── notifications (subcollection)  // group activity for this member
+│           └── autoID (document)
+│               ├── kind: String  // "eventEdited"
+│               ├── title: String  // "<event name> has been edited"
+│               ├── body: String  // "<event name> in group <group name> has been edited"
+│               ├── groupID: String
+│               ├── eventID: String
+│               └── createdAt: Timestamp
 │
 └── groups (collection)
     └── Auto-ID (document)

@@ -61,6 +61,18 @@ struct AuthView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .shadow(color: .gray.opacity(0.25), radius: 16)
             .padding(24)
+            .overlay{
+                Image(.authHang1)
+                    .resizable()
+                    .frame(width: 100,height:100)
+                    .offset(x: 100,y: 140)
+            }
+            .overlay{
+                Image(.authHang2)
+                    .resizable()
+                    .frame(width: 100,height:100)
+                    .offset(x: -100,y: -160)
+            }
             .alert(
                 "Couldn't sign in",
                 isPresented: Binding(

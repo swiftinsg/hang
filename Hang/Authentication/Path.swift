@@ -16,6 +16,10 @@ struct Path {
         // calendar events: users/<uid>/calendar/<entryID>
         static let Calendar = "calendar"
 
+        // Subcollection under each user document that holds group activity
+        // delivered to that member: users/<uid>/notifications/<autoID>
+        static let Notifications = "notifications"
+
         // One collection that holds one document per group.
         static let Groups = "groups"
 

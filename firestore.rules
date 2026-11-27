@@ -235,6 +235,33 @@ service cloud.firestore {
       match /calendar/{eventID} {
         allow read, write: if signedIn() && request.auth.uid == uid;
       }
+
+      // Edit notices are written by any member of the group into each member's
+      // inbox. The recipient alone can read or clear their own inbox.
+      match /notifications/{notificationID} {
+        function validEditNotice() {
+          let data = request.resource.data;
+          return data.keys().hasOnly(
+                   ['kind', 'title', 'body', 'groupID', 'eventID', 'createdAt'])
+            && data.kind == 'eventEdited'
+            && data.groupID is string
+            && data.groupID.size() > 0
+            && data.eventID is string
+            && data.title is string
+            && data.title.size() > 0
+            && data.title.size() <= 300
+            && data.body is string
+            && data.body.size() > 0
+            && data.body.size() <= 500
+            && data.createdAt == request.time;
+        }
+
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create: if signedIn()
+          && validEditNotice()
+          && isGroupMember(request.resource.data.groupID);
+        allow delete: if signedIn() && request.auth.uid == uid;
+      }
     }
 
     // ----------------------------------------------------------------- groups

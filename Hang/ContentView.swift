@@ -3,6 +3,7 @@ import FirebaseCore
 import SwiftUI
 
 struct ContentView: View {
+    let notify = NotificationHandler()
     @StateObject private var saveManager = SaveManager()
     @State private var userName = ""
     @State private var showNamePrompt = false
@@ -104,6 +105,10 @@ struct ContentView: View {
                     .keyboardShortcut(.defaultAction)
                 Button("Cancel", role: .cancel) {}
             }
+            .task{
+                notify.askPermission()
+            }
+            
     }
 
     // MARK: - Subviews
@@ -148,6 +153,7 @@ struct ContentView: View {
         saveManager.loadProfile()
         PersonalEventsStore.shared.startListening()
         GroupStore.shared.startListening()
+        GroupNotificationStore.shared.startListening()
     }
 
     private func handleDisappear() {
