@@ -257,6 +257,8 @@ service cloud.firestore {
         || (isGroupMember(groupID) && validMemberProfileRefresh())
         || (isGroupMember(groupID) && validGroupColorChange())
         || (isGroupMember(groupID) && validGroupRename())
+        // TEMPORARY DIAGNOSTIC — keeps membership, drops hasGroupBasics. REMOVE.
+        || (isGroupMember(groupID) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']) && request.resource.data.name is string)
       );
 
       // Groups are shared history; no client flow deletes a group document.
