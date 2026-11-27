@@ -20,7 +20,7 @@ class NotificationHandler {
     }
     
     func sendNotification(title: String, body: String) {
-        var trigger: UNNotificationTrigger?
+        let trigger: UNNotificationTrigger? = nil
         
         // Customise the content
         let content = UNMutableNotificationContent()

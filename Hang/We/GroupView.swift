@@ -23,6 +23,64 @@ public enum GroupTab: String, CaseIterable, Identifiable {
     public var id: Self { self }
 }
 
+/// The create/edit sheet is identical in the Calendar and Events tabs. Keeping
+/// it in one place avoids two copies drifting apart (especially the save and
+/// notification fan-out, which must happen in that order).
+private struct GroupEventEditorSheet: ViewModifier {
+    @Binding var activeSheet: GroupCalendarSheet?
+    @Binding var tg: TestGroup
+    let initialDate: Date
+
+    func body(content: Content) -> some View {
+        content.sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .create:
+                CreateEventView(tg: $tg, initialDate: initialDate)
+                    .presentationDetents([.medium, .large])
+            case .edit(let event):
+                EditEventView(
+                    events: $tg.events,
+                    eventID: event.id,
+                    onSave: { updatedEvent in
+                        let saved = try await GroupStore.shared.updateEvent(
+                            updatedEvent,
+                            to: tg
+                        )
+                        guard saved else { return }
+                        // Only notify after the event write has been accepted.
+                        await GroupNotificationStore.shared.notifyEventEdited(
+                            eventName: updatedEvent.name,
+                            groupName: tg.name,
+                            groupID: tg.documentID,
+                            eventID: updatedEvent.id.uuidString
+                        )
+                    },
+                    onDelete: { eventID in
+                        try await GroupStore.shared.deleteEvent(eventID, from: tg)
+                    }
+                )
+                .presentationDetents([.medium, .large])
+            }
+        }
+    }
+}
+
+fileprivate extension View {
+    func groupEventEditor(
+        activeSheet: Binding<GroupCalendarSheet?>,
+        tg: Binding<TestGroup>,
+        initialDate: Date
+    ) -> some View {
+        modifier(
+            GroupEventEditorSheet(
+                activeSheet: activeSheet,
+                tg: tg,
+                initialDate: initialDate
+            )
+        )
+    }
+}
+
 struct GroupView: View {
     var sizing = Sizing()
     // rip Colors() struct
@@ -37,43 +95,17 @@ struct GroupView: View {
         NavigationStack {
             ZStack {
                 VStack {
-                    Button {
-                        nameDraft = tg.name
-                        isRenaming = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text(tg.name)
-                                .font(.largeTitle.bold())
-                                .fontWeight(.bold)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            ZStack{
-                                Circle()
-                                    .frame(width: screenSize.width*0.09)
-                                    .foregroundStyle(.accent)
-                                    .opacity(0.5)
-                                Image(systemName: "pencil")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                
-                            }
-                        }
-                        .padding(.horizontal)
-                        .contentShape(Rectangle())
+                    HStack(spacing: 8) {
+                        Text(tg.name)
+                            .font(.largeTitle.bold())
+                            .fontWeight(.bold)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Rename group \(tg.name)")
-                    .alert("Rename group", isPresented: $isRenaming) {
-                        TextField("Group name", text: $nameDraft)
-                        Button("Cancel", role: .cancel) {}
-                        Button("Save") {
-                            Task { await GroupStore.shared.renameGroup(tg, newName: nameDraft) }
-                        }
-                    } message: {
-                        Text("Every member sees the new name.")
-                    }
-
+                    .padding(.horizontal)
+                    .contentShape(Rectangle())
+                    
                     if let message = GroupStore.shared.errorMessage {
-                        Text("Rename failed: \(message)")
+                        Text("Group sync issue: \(message)")
                             .font(.caption)
                             .foregroundStyle(.red)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -87,7 +119,7 @@ struct GroupView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal)
                     }
-
+                    
                     Picker("Picker", selection: $selectedGroupTab) {
                         ForEach(GroupTab.allCases) { gtab in
                             Text(gtab.rawValue)
@@ -108,6 +140,26 @@ struct GroupView: View {
                 }
                 //                .navigationTitle(tg.name)
             }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        nameDraft = tg.name
+                        isRenaming = true
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                    .accessibilityLabel("Rename group \(tg.name)")
+                    .alert("Rename group", isPresented: $isRenaming) {
+                        TextField("Group name", text: $nameDraft)
+                        Button("Cancel", role: .cancel) {}
+                        Button("Save") {
+                            Task { await GroupStore.shared.renameGroup(tg, newName: nameDraft) }
+                        }
+                    } message: {
+                        Text("Every member sees the new name.")
+                    }
+                }
+            }
             .onAppear {
                 // Keep this group's shared hangouts live so new ones appear
                 // for every member without reopening the app.
@@ -121,11 +173,12 @@ struct GroupView: View {
                 guard !groupID.isEmpty else { return }
                 availabilityStore.listen(groupID: groupID)
                 if let uid = Auth.auth().currentUser?.uid {
+                    // Throttled like every other automatic sync; pull-to-refresh
+                    // is the explicit path for a forced upload.
                     Task {
                         await AvailabilityPublisher.shared.refresh(
                             groups: [groupID],
-                            uid: uid,
-                            force: true
+                            uid: uid
                         )
                     }
                 }
@@ -248,11 +301,6 @@ struct CalendarView: View {
         return Array(symbols[1...6] + [symbols[0]])
     }
 
-    private var todayWeekdayIndex: Int {
-        let originalIndex = calendar.component(.weekday, from: Date()) - 1
-        return (originalIndex + 6) % 7
-    }
-
     private func isPastDate(_ date: Date) -> Bool {
         date < calendar.startOfDay(for: Date())
     }
@@ -323,38 +371,11 @@ struct CalendarView: View {
         .overlay(alignment: .bottomTrailing) {
             createEventButton
         }
-        .sheet(item: $activeSheet) { sheet in
-            switch sheet {
-            case .create:
-                CreateEventView(
-                    tg: $tg,
-                    initialDate: effectiveSelectedDate
-                )
-                .presentationDetents([.medium, .large])
-            case .edit(let event):
-                EditEventView(
-                    events: $tg.events,
-                    eventID: event.id,
-                    onSave: { updatedEvent in
-                        GroupStore.shared.updateEvent(updatedEvent, to: tg)
-                        // Save just happened: fan the edit notice out to every
-                        // member, including the editor.
-                        Task {
-                            await GroupNotificationStore.shared.notifyEventEdited(
-                                eventName: updatedEvent.name,
-                                groupName: tg.name,
-                                groupID: tg.documentID,
-                                eventID: updatedEvent.id.uuidString
-                            )
-                        }
-                    },
-                    onDelete: { eventID in
-                        GroupStore.shared.deleteEvent(eventID, from: tg)
-                    }
-                )
-                .presentationDetents([.medium, .large])
-            }
-        }
+        .groupEventEditor(
+            activeSheet: $activeSheet,
+            tg: $tg,
+            initialDate: effectiveSelectedDate
+        )
         .task {
             calendarStore.loadEventsIfAuthorized()
         }
@@ -451,38 +472,6 @@ struct CalendarView: View {
                 event.startDate < dayEnd && event.endDate > dayStart
             }
 
-        // When several events cover the day, the longest one decides the
-        // outline colour, matching the personal calendar's month grid.
-        let dayEvents: [CalendarDayEvent] = {
-            guard !isPastDate else { return [] }
-            var events = tg.events.compactMap {
-                CalendarDayEvent.group(
-                    $0,
-                    dayStart: dayStart,
-                    dayEnd: dayEnd
-                )
-            }
-            events += personalStore.events.compactMap {
-                CalendarDayEvent.personal(
-                    $0,
-                    storedColors: storedColors.wrappedValue,
-                    dayStart: dayStart,
-                    dayEnd: dayEnd
-                )
-            }
-            events += calendarStore.events(on: date, calendar: calendar)
-                .compactMap {
-                    CalendarDayEvent.imported(
-                        $0,
-                        storedColors: storedColors.wrappedValue,
-                        dayStart: dayStart,
-                        dayEnd: dayEnd
-                    )
-                }
-            return events
-        }()
-        let outlineColor = CalendarDayOutline.color(for: dayEvents)
-
         let isTopAvailable =
             !isPastDate
             && topAvailableDays.contains(calendar.startOfDay(for: date))
@@ -538,17 +527,7 @@ struct CalendarView: View {
                             )
                     }
                 }
-            
-//                .overlay {
-//                    // Days that already have an event use the colour of the
-//                    // event that spends the most time on that day.
-//                    if let outlineColor {
-//                        RoundedRectangle(cornerRadius: 6)
-//                            .strokeBorder(outlineColor, lineWidth: 2)
-//                    }
-//                }
-                
-                
+
                 .overlay {
                     // Most available days of the month.
                     if isTopAvailable && !hasGroupEvents {
@@ -642,7 +621,6 @@ struct EventView: View {
     var size: CGSize
     var sizing = Sizing()
     // rip Colors() struct
-    @State private var showAddView = false
     @State private var activeSheet: GroupCalendarSheet?
 
     var body: some View {
@@ -727,38 +705,11 @@ struct EventView: View {
                 activeSheet = .create
             }
         }
-        .sheet(item: $activeSheet) { sheet in
-            switch sheet {
-            case .create:
-                CreateEventView(
-                    tg: $tg,
-                    initialDate: Date()
-                )
-                .presentationDetents([.medium, .large])
-            case .edit(let event):
-                EditEventView(
-                    events: $tg.events,
-                    eventID: event.id,
-                    onSave: { updatedEvent in
-                        GroupStore.shared.updateEvent(updatedEvent, to: tg)
-                        // Save just happened: fan the edit notice out to every
-                        // member, including the editor.
-                        Task {
-                            await GroupNotificationStore.shared.notifyEventEdited(
-                                eventName: updatedEvent.name,
-                                groupName: tg.name,
-                                groupID: tg.documentID,
-                                eventID: updatedEvent.id.uuidString
-                            )
-                        }
-                    },
-                    onDelete: { eventID in
-                        GroupStore.shared.deleteEvent(eventID, from: tg)
-                    }
-                )
-                .presentationDetents([.medium, .large])
-            }
-        }
+        .groupEventEditor(
+            activeSheet: $activeSheet,
+            tg: $tg,
+            initialDate: Date()
+        )
     }
 }
 
@@ -771,10 +722,13 @@ struct MoreInfoView: View {
     @State private var isConfirmingLeave = false
     @State private var isFilled = false
     @State private var resetTask: Task<Void, Never>?
-    /// Local mirror of the group colour. The picker reads this so a tap is
-    /// reflected immediately instead of waiting for the Firestore write and
-    /// the resulting group snapshot to round-trip back into the binding.
+    /// The swatches use a local selection exactly like the create-event
+    /// picker, so the checkmark moves on the tap instead of waiting for the
+    /// Firestore round trip. It is seeded from the group binding and only
+    /// follows outside changes while no write of ours is in flight.
     @State private var selectedEventColor: PersonalEventOutlineColor = .blue
+    @State private var isSavingColor = false
+    @State private var colorErrorMessage: String?
 
     private var eventColorBinding: Binding<PersonalEventOutlineColor> {
         Binding(
@@ -784,20 +738,43 @@ struct MoreInfoView: View {
     }
 
     private func applyEventColor(_ color: PersonalEventOutlineColor) {
-        selectedEventColor = color
-        tg.eventColor = color
+        guard !isSavingColor, color != selectedEventColor else { return }
 
-        // Keep this device's loaded events in step right away; the store also
-        // does this after the write lands, for every member.
+        let previous = selectedEventColor
+        let group = tg
+
+        selectedEventColor = color
+        setLocalEventColor(color)
+        isSavingColor = true
+        colorErrorMessage = nil
+
+        Task { @MainActor in
+            let saved = await GroupStore.shared.setEventColor(color, for: group)
+            isSavingColor = false
+
+            if saved {
+                selectedEventColor = color
+            } else {
+                // Roll back to the colour that was selected before the tap,
+                // and let the alert explain why Firestore rejected the write.
+                let failure = GroupStore.shared.errorMessage
+                selectedEventColor = previous
+                setLocalEventColor(previous)
+                colorErrorMessage = failure ?? "Please try again."
+            }
+        }
+    }
+
+    /// Updates the store-backed group immediately so loaded events take the new
+    /// colour before the write lands. The store repeats this for every member
+    /// once Firestore accepts it.
+    private func setLocalEventColor(_ color: PersonalEventOutlineColor) {
+        tg.eventColor = color
         let hangColor = color.hangColor ?? .blue
         tg.events = tg.events.map { event in
             var colored = event
             colored.groupColor = hangColor
             return colored
-        }
-
-        Task {
-            await GroupStore.shared.setEventColor(color, for: tg)
         }
     }
 
@@ -863,9 +840,6 @@ struct MoreInfoView: View {
                     includeAutomatic: false,
                     usesGroupPalette: true
                 )
-//                Text("All events from this group use this color.")
-//                    .font(.caption)
-//                    .foregroundStyle(.secondary)
             }
             .listRowBackground(Color(.secondarySystemBackground))
 
@@ -883,10 +857,22 @@ struct MoreInfoView: View {
         .scrollContentBackground(.hidden)
         .onAppear { selectedEventColor = tg.eventColor }
         .onChange(of: tg.eventColor) { _, newColor in
-            // Other members can change the colour while this screen is open.
-            if selectedEventColor != newColor {
-                selectedEventColor = newColor
-            }
+            // Another member can change the colour while this screen is open.
+            // Ignore snapshots produced by our own write so the checkmark does
+            // not jump back before Firestore confirms it.
+            guard !isSavingColor else { return }
+            selectedEventColor = newColor
+        }
+        .alert(
+            "Couldn't change group color",
+            isPresented: Binding(
+                get: { colorErrorMessage != nil },
+                set: { if !$0 { colorErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(colorErrorMessage ?? "Please try again.")
         }
         .alert(
             "Leave this group?",
@@ -905,9 +891,10 @@ struct MoreInfoView: View {
 
     @ViewBuilder
     private func otpDigitBox(at index: Int) -> some View {
-        //        guard index < tg.code.count else { return "" }
-        let stringIndex = tg.code.index(tg.code.startIndex, offsetBy: index)
-        let character = String(tg.code[stringIndex])
+        // Legacy/invalid codes can be shorter than six characters.
+        let character = index < tg.code.count
+            ? String(tg.code[tg.code.index(tg.code.startIndex, offsetBy: index)])
+            : ""
 
         Text(character)
             .font(.title2.bold())

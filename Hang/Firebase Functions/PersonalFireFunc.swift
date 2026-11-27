@@ -10,13 +10,19 @@ import FirebaseFirestore
 import FirebaseAuth
 import Combine
 
-class SaveManager: ObservableObject {
+final class SaveManager: ObservableObject {
+    /// One profile listener for the whole app, shared by ContentView and
+    /// ProfileView instead of two independent copies of the same document.
+    static let shared = SaveManager()
+
     private var db = Firestore.firestore()
     @Published var profile: ProfileData?
     // True once the first snapshot has come back (or failed), so views know the
     // difference between "still loading" and "this account really has no username".
     @Published var hasLoadedProfile = false
     private var listener: ListenerRegistration?
+
+    private init() {}
 
     // Each Apple account gets its own document: users/<firebase uid>
     private var profileDocument: DocumentReference? {
@@ -27,10 +33,13 @@ class SaveManager: ObservableObject {
     // Create / update the signed-in user's own profile
     func saveUsername(_ username: String) {
         guard let profileDocument else { return }
+        // Group rules cap the copied name at 100 characters. Cap here too so a
+        // long name can never break group writes on every device.
+        let trimmed = String(username.prefix(100))
         // Write only the username so a later name change can't reset the
         // reminder preference or the chosen profile picture.
-        profileDocument.setData(["username": username], merge: true)
-        profile?.username = username
+        profileDocument.setData(["username": trimmed], merge: true)
+        profile?.username = trimmed
     }
     
     /// Saves the signed-in user's choice of reminder for all their events.
@@ -52,10 +61,6 @@ class SaveManager: ObservableObject {
             merge: true
         )
         profile?.profilePicture = picture
-    }
-
-    func saveEvents(_ username: String) {
-        saveUsername(username)
     }
 
     // Read the signed-in user's own profile
@@ -90,14 +95,9 @@ class SaveManager: ObservableObject {
         }
     }
 
-    // Delete the signed-in user's profile
-    func deleteProfile(_ profile: ProfileData) {
-        guard let profileID = profile.id else { return }
-
-        db.collection(Path.Firestore.Users).document(profileID).delete { error in
-            if let error {
-                print("Error deleting profile: \(error)")
-            }
-        }
+    /// Tears down the profile listener when the signed-in view goes away.
+    func stopListening() {
+        listener?.remove()
+        listener = nil
     }
 }

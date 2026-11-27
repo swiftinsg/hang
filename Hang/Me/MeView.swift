@@ -121,11 +121,6 @@ struct PersonalCalendarView: View {
         return Array(symbols[1...6] + [symbols[0]])
     }
     
-    private var todayWeekdayIndex: Int {
-        let originalIndex = calendar.component(.weekday, from: Date()) - 1
-        return (originalIndex + 6) % 7
-    }
-    
     /// The personal calendar behaves like a normal calendar: any date can be selected, including past dates, so they can be viewed and edited.
     private var effectiveSelectedDate: Date {
         selectedDate ?? Date()
@@ -194,7 +189,7 @@ struct PersonalCalendarView: View {
                     events: $personalEvents,
                     initialDate: effectiveSelectedDate,
                     onSave: { newEvents in
-                        personalStore.add(newEvents)
+                        try await personalStore.add(newEvents)
                     }
                 )
                 .presentationDetents([.large])
@@ -203,10 +198,10 @@ struct PersonalCalendarView: View {
                     events: $personalEvents,
                     eventID: event.id,
                     onSave: { updatedEvent in
-                        personalStore.update(updatedEvent)
+                        try await personalStore.update(updatedEvent)
                     },
                     onDelete: { eventID in
-                        personalStore.delete(eventID)
+                        try await personalStore.delete(eventID)
                     }
                 )
                 .presentationDetents([.medium, .large])
@@ -433,7 +428,6 @@ struct PersonalCalendarView: View {
         } label: {
             Image(systemName: "plus")
                 .font(.title2.weight(.semibold))
-                .padding(5)
         }
         .buttonStyle(.glassProminent)
         .controlSize(.large)
@@ -442,4 +436,3 @@ struct PersonalCalendarView: View {
         .buttonBorderShape(.circle)
     }
 }
-

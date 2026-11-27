@@ -9,10 +9,9 @@ import FirebaseSignInWithApple
 import SwiftUI
 
 struct ProfileView: View {
-    @State private var profile = false
     @Environment(\.firebaseSignInWithApple) private var firebaseSignInWithApple
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var saveManager = SaveManager()
+    @ObservedObject private var saveManager = SaveManager.shared
     @State private var accountDeletion = AccountDeletionController.shared
     @State private var showingAlert = false
     @State private var showingDeleteAlert = false

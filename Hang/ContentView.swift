@@ -4,7 +4,7 @@ import SwiftUI
 
 struct ContentView: View {
     let notify = NotificationHandler()
-    @StateObject private var saveManager = SaveManager()
+    @ObservedObject private var saveManager = SaveManager.shared
     @State private var userName = ""
     @State private var showNamePrompt = false
     
@@ -89,7 +89,7 @@ struct ContentView: View {
                 onAppear: handleAppear,
                 onDisappear: handleDisappear,
                 onGroupIDsChange: handleGroupIDsChange,
-                onEventsChange: { Task { await publishAvailability(to: groupIDs, force: true) } },
+                onEventsChange: { Task { await publishAvailability(to: groupIDs) } },
                 onSceneBecameActive: handleSceneBecameActive,
                 onProfileLoaded: handleProfileLoaded
             ))
@@ -158,21 +158,23 @@ struct ContentView: View {
 
     private func handleDisappear() {
         availabilityStore.stopAll()
+        // Sign-out removes ContentView. Clear every singleton store so the next
+        // account can't see stale groups, private events, notices or reminders.
+        PersonalEventsStore.shared.stopListening()
+        GroupStore.shared.stopListening()
+        GroupNotificationStore.shared.stopListening()
+        saveManager.stopListening()
         Task { await ReminderScheduler.shared.cancelAll() }
     }
 
     private func handleGroupIDsChange(_ ids: [String]) {
         availabilityStore.sync(groupIDs: ids)
         Task { await publishAvailability(to: ids) }
-        // Uncomment once GroupStore.shared.refreshMyProfile() is implemented:
-        // if !ids.isEmpty {
-        //     Task { await GroupStore.shared.refreshMyProfile() }
-        // }
     }
 
     private func handleSceneBecameActive() {
         calendarStore.loadEventsIfAuthorized()
-        Task { await publishAvailability(to: groupIDs, force: true) }
+        Task { await publishAvailability(to: groupIDs) }
     }
 
     private func handleProfileLoaded() {
@@ -180,19 +182,17 @@ struct ContentView: View {
             in: .whitespacesAndNewlines
         ) ?? ""
         showNamePrompt = trimmedName.isEmpty
-        // Uncomment once GroupStore.shared.refreshMyProfile() is implemented:
-        // if !trimmedName.isEmpty {
-        //     Task { await GroupStore.shared.refreshMyProfile() }
-        // }
     }
 
     private func saveUsername() {
-        let trimmedName = userName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedName = String(
+            userName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(100)
+        )
         guard !trimmedName.isEmpty else { return }
         saveManager.saveUsername(trimmedName)
         userName = ""
-        // Uncomment once GroupStore.shared.refreshMyProfile() is implemented:
-        // Task { await GroupStore.shared.refreshMyProfile() }
+        // Group documents carry a copy of the display name; keep it in step.
+        Task { await GroupStore.shared.refreshMyProfile() }
     }
 
     /// Schedules the user's chosen reminder for all their events on this device.

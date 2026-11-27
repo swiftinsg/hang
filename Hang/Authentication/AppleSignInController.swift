@@ -158,14 +158,19 @@ extension AppleSignInController: ASAuthorizationControllerPresentationContextPro
 
         let windowScenes = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
-        let activeScene = windowScenes.first { $0.activationState == .foregroundActive }
-            ?? windowScenes.first { $0.activationState == .foregroundInactive }
-            ?? windowScenes.first
-        let window = activeScene?.windows.first { $0.isKeyWindow }
-            ?? activeScene?.windows.first
-            // Last resort: AuthenticationServices only asks for an anchor while it is
-            // presenting, so a window scene always exists by then.
-            ?? ASPresentationAnchor()
+        guard let activeScene = windowScenes.first(where: {
+            $0.activationState == .foregroundActive
+        }) ?? windowScenes.first(where: {
+            $0.activationState == .foregroundInactive
+        }) ?? windowScenes.first else {
+            // AuthenticationServices only asks for an anchor while it is
+            // presenting, so an active scene always exists here.
+            preconditionFailure("Apple sign-in requires an active window scene.")
+        }
+
+        let window = activeScene.windows.first { $0.isKeyWindow }
+            ?? activeScene.windows.first
+            ?? UIWindow(windowScene: activeScene)
 
         hostWindow = window
         return window
@@ -199,7 +204,9 @@ private extension AppleSignInController {
         var randomBytes = [UInt8](repeating: 0, count: length)
         let errorCode = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
         if errorCode != errSecSuccess {
-            fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
+            // Never crash the sign-in flow. A UUID v4 still supplies enough
+            // entropy for this one-shot nonce and uses only allowed characters.
+            return UUID().uuidString
         }
 
         let charset: [Character] =

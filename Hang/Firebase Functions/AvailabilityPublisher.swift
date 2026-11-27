@@ -47,6 +47,10 @@ final class AvailabilityPublisher {
     @ObservationIgnored private var inFlight: Set<String> = []
     @ObservationIgnored private var isPaused = false
     @ObservationIgnored private var pendingAfterResume: Set<String> = []
+    /// Groups the user has left (or been removed from). Publishing to them is
+    /// both pointless and denied by the rules; forget them until the membership
+    /// listener reports the group again.
+    @ObservationIgnored private var blockedGroups: Set<String> = []
 
     // MARK: - Payload
 
@@ -110,7 +114,7 @@ final class AvailabilityPublisher {
     /// The document has exactly three fields. The rules reject anything else,
     /// and none of the three can carry an event title.
     func publish(to groupID: String, uid: String) async throws {
-        guard !groupID.isEmpty else { return }
+        guard !groupID.isEmpty, !blockedGroups.contains(groupID) else { return }
         if isPaused {
             pendingAfterResume.insert(groupID)
             return
@@ -151,6 +155,28 @@ final class AvailabilityPublisher {
             .document(uid)
             .delete()
         lastPublish[groupID] = nil
+    }
+
+    /// Stops sharing with a group the user just left or was removed from. The
+    /// document itself is deleted by the caller (see GroupStore.leaveGroup).
+    func stopPublishing(to groupID: String) {
+        guard !groupID.isEmpty else { return }
+        blockedGroups.insert(groupID)
+        pendingAfterResume.remove(groupID)
+        lastPublish[groupID] = nil
+    }
+
+    /// Re-enables publishing after the user (re)joins a group.
+    func resumePublishing(for groupID: String) {
+        guard !groupID.isEmpty else { return }
+        blockedGroups.remove(groupID)
+    }
+
+    /// Clears per-session scheduling state when a different account signs in.
+    func resetSession() {
+        blockedGroups.removeAll()
+        lastPublish.removeAll()
+        pendingAfterResume.removeAll()
     }
 
     /// Prevents availability writes while account deletion removes them.

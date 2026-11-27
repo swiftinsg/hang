@@ -73,6 +73,9 @@ final class PersonalEventsStore {
         listener?.remove()
         listener = nil
         listeningUID = nil
+        // Never carry one account's private events into the next sign-in.
+        events = []
+        errorMessage = nil
     }
 
     /// Forces a fresh read for pull-to-refresh. The live listener stays in
@@ -106,41 +109,53 @@ final class PersonalEventsStore {
         .sorted { $0.time < $1.time }
     }
 
-    /// Saves a new personal event. Its UUID becomes the document ID so the
-    /// event keeps the same identity in Firestore and in the app.
-    func add(_ event: GroupEvents) {
+    /// Saves new personal events in one batch. Their UUIDs become document IDs
+    /// so they keep the same identity in Firestore and in the app.
+    func add(_ newEvents: [GroupEvents]) async throws {
         guard let collection = calendarCollection else {
-            errorMessage = "Sign in to save your calendar."
-            return
+            throw GroupStoreError.notSignedIn
         }
+        guard !newEvents.isEmpty else { return }
 
         do {
-            try collection.document(event.id.uuidString)
-                .setData(from: PersonalEventData(event: event))
+            // Repeats are capped well below Firestore's 500-write limit.
+            for chunk in newEvents.chunks(of: 400) {
+                let batch = db.batch()
+                for event in chunk {
+                    try batch.setData(
+                        from: PersonalEventData(event: event),
+                        forDocument: collection.document(event.id.uuidString)
+                    )
+                }
+                try await batch.commit()
+            }
+            await MainActor.run { self.errorMessage = nil }
         } catch {
-            errorMessage = error.localizedDescription
+            await MainActor.run { self.errorMessage = error.localizedDescription }
+            throw error
         }
     }
 
-    func add(_ newEvents: [GroupEvents]) {
-        for event in newEvents {
-            add(event)
-        }
+    func add(_ event: GroupEvents) async throws {
+        try await add([event])
     }
 
     /// Saves changes to an existing event, keeping its document ID.
-    func update(_ event: GroupEvents) {
-        add(event)
+    func update(_ event: GroupEvents) async throws {
+        try await add(event)
     }
 
-    func delete(_ eventID: UUID) {
-        guard let collection = calendarCollection else { return }
+    func delete(_ eventID: UUID) async throws {
+        guard let collection = calendarCollection else {
+            throw GroupStoreError.notSignedIn
+        }
 
-        collection.document(eventID.uuidString).delete { [weak self] error in
-            guard let error else { return }
-            Task { @MainActor in
-                self?.errorMessage = error.localizedDescription
-            }
+        do {
+            try await collection.document(eventID.uuidString).delete()
+            await MainActor.run { self.errorMessage = nil }
+        } catch {
+            await MainActor.run { self.errorMessage = error.localizedDescription }
+            throw error
         }
     }
 }

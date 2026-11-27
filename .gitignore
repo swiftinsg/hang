@@ -1,4 +1,6 @@
 # Firebase & Secrets
+firestore-debug.log
+firebase-debug.log
 GoogleService-Info.plist
 *firebase-adminsdk*.json
 *.xcconfig

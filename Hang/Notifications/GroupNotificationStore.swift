@@ -42,6 +42,22 @@ final class GroupNotificationStore {
         }
     }
 
+    /// Tears down both the auth observer and the inbox listener. Called when
+    /// ContentView disappears so a signed-out account cannot keep receiving
+    /// notifications or leak them into the next session.
+    func stopListening() {
+        if let authHandle {
+            Auth.auth().removeStateDidChangeListener(authHandle)
+        }
+        authHandle = nil
+        listener?.remove()
+        listener = nil
+        listeningUID = nil
+        presentedIDs.removeAll()
+        hasSeededExisting = false
+        errorMessage = nil
+    }
+
     /// Moves the Firestore listener to the given account. Only resubscribes
     /// when the uid actually changes.
     private func subscribe(uid: String?) {
@@ -78,6 +94,7 @@ final class GroupNotificationStore {
                 }
 
                 Task { @MainActor in
+                    self.errorMessage = nil
                     // The first snapshot is inbox history, not a fresh edit.
                     guard self.hasSeededExisting else {
                         self.presentedIDs = Set(notices.map(\.id))
@@ -115,21 +132,30 @@ final class GroupNotificationStore {
                 return
             }
 
-            let batch = db.batch()
-            for member in group.people {
-                let inbox = db.collection(Path.Firestore.Users)
-                    .document(member.documentID)
-                    .collection(Path.Firestore.Notifications)
-                batch.setData([
-                    "kind": "eventEdited",
-                    "title": "\(eventName) has been edited",
-                    "body": "\(eventName) in group \(groupName) has been edited",
-                    "groupID": groupID,
-                    "eventID": eventID,
-                    "createdAt": FieldValue.serverTimestamp()
-                ], forDocument: inbox.document())
+            let notice: [String: Any] = [
+                "kind": "eventEdited",
+                "title": "\(eventName) has been edited",
+                "body": "\(eventName) in group \(groupName) has been edited",
+                "groupID": groupID,
+                "eventID": eventID,
+                "createdAt": FieldValue.serverTimestamp()
+            ]
+
+            // Every write re-checks sender and recipient membership in the rules
+            // (two get()s). Keep batches at 10 so a large group can't hit
+            // Firestore's per-batch document-access limit and deny the batch.
+            let chunkSize = 10
+            for start in stride(from: 0, to: group.people.count, by: chunkSize) {
+                let end = min(start + chunkSize, group.people.count)
+                let batch = db.batch()
+                for member in group.people[start..<end] {
+                    let inbox = db.collection(Path.Firestore.Users)
+                        .document(member.documentID)
+                        .collection(Path.Firestore.Notifications)
+                    batch.setData(notice, forDocument: inbox.document())
+                }
+                try await batch.commit()
             }
-            try await batch.commit()
             print("Delivered event edit notice to \(group.people.count) member(s)")
         } catch {
             print("Failed to deliver event edit notification: \(error)")

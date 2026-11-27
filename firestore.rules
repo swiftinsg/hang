@@ -31,6 +31,28 @@ service cloud.firestore {
              .hasAny([selfRef()]);
     }
 
+    // The recipient of an edit notice must belong to the same group as the
+    // sender. Without this, any member could write a notice into any inbox.
+    function isGroupMemberUID(groupID, uid) {
+      return signedIn()
+        && get(/databases/$(database)/documents/groups/$(groupID))
+             .data.people
+             .hasAny([/databases/$(database)/documents/users/$(uid)]);
+    }
+
+    // Group map values are copied into every member's view of the group. Only
+    // strings of a bounded size may be written, otherwise decoding fails and
+    // the whole group disappears for everyone.
+    function validOwnNameValue(map) {
+      return map.get(request.auth.uid, '') is string
+        && map.get(request.auth.uid, '').size() <= 100;
+    }
+
+    function validOwnPictureValue(map) {
+      return map.get(request.auth.uid, '') is string
+        && map.get(request.auth.uid, '').size() <= 32;
+    }
+
     // ------------------------------------------------- group-document helpers
 
     function hasGroupBasics(data) {
@@ -39,23 +61,36 @@ service cloud.firestore {
         && data.inviteCode.size() > 0
         && data.inviteCode.size() <= 32
         && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 100
         && data.desc is string
+        && data.desc.size() <= 2000
         && data.people is list;
     }
 
-    function scalarGroupFieldsUnchanged(before, after) {
-      return after.inviteCode == before.inviteCode
-        && after.name == before.name
-        && after.desc == before.desc
-        && after.get('eventColor', '') == before.get('eventColor', '')
-        && after.keys().hasOnly(
-             ['inviteCode', 'name', 'desc', 'people',
-              'memberNames', 'memberProfilePictures', 'eventColor']
-           )
-        && before.keys().hasOnly(
-             ['inviteCode', 'name', 'desc', 'people',
-              'memberNames', 'memberProfilePictures', 'eventColor']
-           );
+    function groupKeys() {
+      return ['inviteCode', 'name', 'desc', 'people',
+              'memberNames', 'memberProfilePictures', 'eventColor'];
+    }
+
+    function validColorValue(value) {
+      return value is string && value.size() > 0 && value.size() <= 16;
+    }
+
+    // Older groups were created before `eventColor`, `memberNames`, and
+    // `memberProfilePictures`, and some have extra fields from older versions.
+    // Updates validate the fields the app actually uses; unknown existing keys
+    // are allowed to remain, and the operation branches below prevent new ones
+    // from being introduced. New documents are still strictly checked.
+    function validGroupShape(data) {
+      return hasGroupBasics(data)
+        && (!data.keys().hasAny(['eventColor']) || validColorValue(data.eventColor))
+        && data.get('memberNames', {}) is map
+        && data.get('memberProfilePictures', {}) is map;
+    }
+
+    function changedGroupKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
     }
 
     function onlyOwnMapKeysChanged(afterMap, beforeMap, uid) {
@@ -72,17 +107,19 @@ service cloud.firestore {
     function validNewGroup() {
       let data = request.resource.data;
       return hasGroupBasics(data)
-        && data.keys().hasOnly(
-             ['inviteCode', 'name', 'desc', 'people',
-              'memberNames', 'memberProfilePictures', 'eventColor']
-           )
-        && data.get('eventColor', '') is string
-        && data.get('eventColor', '').size() > 0
-        && data.get('eventColor', '').size() <= 16
+        && data.keys().hasOnly(groupKeys())
+        && validColorValue(data.get('eventColor', ''))
         && data.people == [selfRef()]
         && data.get('memberNames', {}).keys().hasOnly([request.auth.uid])
-        && data.get('memberProfilePictures', {}).keys().hasOnly([request.auth.uid]);
+        && data.get('memberProfilePictures', {}).keys().hasOnly([request.auth.uid])
+        && validOwnNameValue(data.get('memberNames', {}))
+        && validOwnPictureValue(data.get('memberProfilePictures', {}));
     }
+
+    // Shape and the caller's own map values are checked once by the update
+    // rule, so each operation below only needs to prove its own change.
+    // Colour changes are handled by their own branch first; no other branch may
+    // touch `eventColor`.
 
     // A non-member may join by adding only themselves and only their own
     // name/avatar entries (GroupStore.joinGroup).
@@ -90,9 +127,8 @@ service cloud.firestore {
       let before = resource.data;
       let after = request.resource.data;
       let self = selfRef();
-      return hasGroupBasics(before)
-        && hasGroupBasics(after)
-        && scalarGroupFieldsUnchanged(before, after)
+      return changedGroupKeys().hasOnly(
+               ['people', 'memberNames', 'memberProfilePictures'])
         && !before.people.hasAny([self])
         && after.people.hasAny([self])
         && after.people.hasAll(before.people)
@@ -112,9 +148,8 @@ service cloud.firestore {
       let before = resource.data;
       let after = request.resource.data;
       let self = selfRef();
-      return hasGroupBasics(before)
-        && hasGroupBasics(after)
-        && scalarGroupFieldsUnchanged(before, after)
+      return changedGroupKeys().hasOnly(
+               ['people', 'memberNames', 'memberProfilePictures'])
         && before.people.hasAny([self])
         && !after.people.hasAny([self])
         && before.people.hasAll(after.people)
@@ -133,10 +168,8 @@ service cloud.firestore {
     function validMemberProfileRefresh() {
       let before = resource.data;
       let after = request.resource.data;
-      return hasGroupBasics(before)
-        && hasGroupBasics(after)
-        && scalarGroupFieldsUnchanged(before, after)
-        && after.people == before.people
+      return changedGroupKeys().hasOnly(
+               ['memberNames', 'memberProfilePictures'])
         && onlyOwnMapKeysChanged(
              after.get('memberNames', {}),
              before.get('memberNames', {}),
@@ -148,48 +181,23 @@ service cloud.firestore {
     }
 
     // A member changing the colour used for this group's shared events.
-    function validGroupColorChange() {
-      let before = resource.data;
-      let after = request.resource.data;
-      return hasGroupBasics(before)
-        && hasGroupBasics(after)
-        && scalarGroupFieldsUnchangedIgnoringColor(before, after)
-        && after.diff(before).affectedKeys().hasOnly(['eventColor'])
-        && after.eventColor is string
-        && after.eventColor.size() > 0
-        && after.eventColor.size() <= 16;
+    // This branch is deliberately self-contained: legacy groups can have
+    // missing or extra fields, and none of those may block the picker.
+    function validGroupColorChange(groupID) {
+      let changed = changedGroupKeys();
+      return isGroupMember(groupID)
+        && changed.hasOnly(['eventColor'])
+        && changed.hasAny(['eventColor'])
+        && request.resource.data.eventColor is string
+        && request.resource.data.eventColor in [
+             'automatic', 'orange', 'red', 'pink', 'purple',
+             'blue', 'cyan', 'green', 'yellow'
+           ];
     }
 
-    // A member renaming the group. Only `name` may change; it stays a
-    // non-empty string, capped at 100 characters, matching the client check.
+    // A member renaming the group.
     function validGroupRename() {
-      let before = resource.data;
-      let after = request.resource.data;
-      return isGroupMember(resource.id)
-        && hasGroupBasics(after)
-        && after.diff(before).affectedKeys().hasOnly(['name'])
-        && after.name is string
-        && after.name.size() > 0
-        && after.name.size() <= 100;
-    }
-
-    // Same shape as scalarGroupFieldsUnchanged, but allows only eventColor.
-    function scalarGroupFieldsUnchangedIgnoringColor(before, after) {
-      return after.inviteCode == before.inviteCode
-        && after.name == before.name
-        && after.desc == before.desc
-        && after.people == before.people
-        && after.get('memberNames', {}) == before.get('memberNames', {})
-        && after.get('memberProfilePictures', {})
-             == before.get('memberProfilePictures', {})
-        && after.keys().hasOnly(
-             ['inviteCode', 'name', 'desc', 'people',
-              'memberNames', 'memberProfilePictures', 'eventColor']
-           )
-        && before.keys().hasOnly(
-             ['inviteCode', 'name', 'desc', 'people',
-              'memberNames', 'memberProfilePictures', 'eventColor']
-           );
+      return changedGroupKeys().hasOnly(['name']);
     }
 
     // Account deletion may erase only the caller's stale entries from groups
@@ -198,9 +206,8 @@ service cloud.firestore {
       let before = resource.data;
       let after = request.resource.data;
       let self = selfRef();
-      return hasGroupBasics(before)
-        && hasGroupBasics(after)
-        && scalarGroupFieldsUnchanged(before, after)
+      return changedGroupKeys().hasOnly(
+               ['memberNames', 'memberProfilePictures'])
         && after.people == before.people
         && !before.people.hasAny([self])
         && onlyOwnMapKeysRemoved(
@@ -215,14 +222,18 @@ service cloud.firestore {
 
     function validEventPayload() {
       let data = request.resource.data;
-      return data.keys().hasOnly(['name', 'desc', 'location', 'time', 'endTime'])
+      return data.keys().hasAll(['name', 'desc', 'location', 'time', 'endTime'])
+        && data.keys().hasOnly(['name', 'desc', 'location', 'time', 'endTime'])
         && data.name is string
+        && data.name.size() > 0
         && data.name.size() <= 200
         && data.desc is string
         && data.desc.size() <= 2000
-        && data.get('location', '') is string
+        && data.location is string
+        && data.location.size() <= 200
         && data.time is timestamp
-        && (!data.keys().hasAny(['endTime']) || data.endTime is timestamp);
+        && data.endTime is timestamp
+        && data.endTime >= data.time;
     }
 
     // --------------------------------------------------------------- profiles
@@ -236,10 +247,10 @@ service cloud.firestore {
         allow read, write: if signedIn() && request.auth.uid == uid;
       }
 
-      // Edit notices are written by any member of the group into each member's
-      // inbox. The recipient alone can read or clear their own inbox.
+      // Edit notices are written by a group member into another member of the
+      // SAME group's inbox. The recipient alone can read or clear their inbox.
       match /notifications/{notificationID} {
-        function validEditNotice() {
+        function validEditNoticeShape() {
           let data = request.resource.data;
           return data.keys().hasOnly(
                    ['kind', 'title', 'body', 'groupID', 'eventID', 'createdAt'])
@@ -247,27 +258,46 @@ service cloud.firestore {
             && data.groupID is string
             && data.groupID.size() > 0
             && data.eventID is string
+            && data.eventID.size() > 0
             && data.title is string
             && data.title.size() > 0
             && data.title.size() <= 300
             && data.body is string
             && data.body.size() > 0
             && data.body.size() <= 500
+            && data.createdAt is timestamp
             && data.createdAt == request.time;
+        }
+
+        // The notice must describe a real event in that group, and its text must
+        // be derived from that event and group name. A member cannot invent a
+        // message by passing arbitrary strings to the fan-out function.
+        function validEditNoticeContent() {
+          let data = request.resource.data;
+          let groupPath = /databases/$(database)/documents/groups/$(data.groupID);
+          let eventPath = /databases/$(database)/documents/groups/$(data.groupID)/events/$(data.eventID);
+          return exists(eventPath)
+            && data.title == get(eventPath).data.name + ' has been edited'
+            && data.body == get(eventPath).data.name
+                 + ' in group ' + get(groupPath).data.name
+                 + ' has been edited';
         }
 
         allow read: if signedIn() && request.auth.uid == uid;
         allow create: if signedIn()
-          && validEditNotice()
-          && isGroupMember(request.resource.data.groupID);
+          && validEditNoticeShape()
+          && isGroupMember(request.resource.data.groupID)
+          && isGroupMemberUID(request.resource.data.groupID, uid)
+          && validEditNoticeContent();
         allow delete: if signedIn() && request.auth.uid == uid;
       }
     }
 
     // ----------------------------------------------------------------- groups
     match /groups/{groupID} {
-      // Direct reads by document ID are member-only. No current client flow
-      // reads a group document directly; rule-level get() calls are unaffected.
+      // Direct reads by document ID are member-only. The notification fan-out
+      // reads the group document to resolve its members, so this stays a
+      // member-only get().
       allow get: if signedIn() && isGroupMember(groupID);
 
       // Invite-code lookup and deletion cleanup need unscoped list queries.
@@ -275,17 +305,28 @@ service cloud.firestore {
 
       allow create: if signedIn() && validNewGroup();
 
-      // Non-member branches come first so a join is never blocked by the
-      // member-only get() inside isGroupMember().
+      // A colour change is checked first and on its own. It must not depend on
+      // the rest of the document's shape: older groups can have missing or
+      // extra fields, and those must never stop the picker from saving.
+      // Every other update still validates shape and this user's copied values
+      // once, then proves which supported operation is being performed.
       allow update: if signedIn() && (
-        validJoin()
-        || validSelfExit()
-        || validStaleSelfCleanup()
-        || (isGroupMember(groupID) && validMemberProfileRefresh())
-        || (isGroupMember(groupID) && validGroupColorChange())
-        || (isGroupMember(groupID) && validGroupRename())
-        // TEMPORARY DIAGNOSTIC — keeps membership, drops hasGroupBasics. REMOVE.
-        || (isGroupMember(groupID) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']) && request.resource.data.name is string)
+        validGroupColorChange(groupID)
+        || (
+          validGroupShape(resource.data)
+          && validGroupShape(request.resource.data)
+          && validOwnNameValue(request.resource.data.get('memberNames', {}))
+          && validOwnPictureValue(request.resource.data.get('memberProfilePictures', {}))
+          && (
+            (isGroupMember(groupID) && (
+              validGroupRename()
+              || validMemberProfileRefresh()
+              || validSelfExit()
+            ))
+            || validJoin()
+            || validStaleSelfCleanup()
+          )
+        )
       );
 
       // Groups are shared history; no client flow deletes a group document.
@@ -321,13 +362,13 @@ service cloud.firestore {
 
         allow read: if isGroupMember(groupID);
 
-        // Only the owner may publish their own busy times. Membership is
-        // intentionally not re-checked here: a live group write and the group
-        // listener can race, and a failed sync used to surface as
-        // "missing or insufficient permission". Reads above remain member-only,
-        // so this does not expose anyone's intervals to non-members.
+        // Only the owner may publish their own busy times, and only while they
+        // are still a member. The client drops a group from its publish list as
+        // soon as leave/deletion removes it, so a denied race is a no-op rather
+        // than a stale republish. Reads above remain member-only too.
         allow create, update: if signedIn()
           && request.auth.uid == uid
+          && isGroupMember(groupID)
           && validPayload();
 
         // Works after leaving / during account deletion.

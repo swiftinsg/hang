@@ -18,7 +18,8 @@ struct CreatePersonalEventView: View {
     @Binding var events: [GroupEvents]
 
     /// Called with the events that were just created so they can be persisted.
-    var onSave: (([GroupEvents]) -> Void)? = nil
+    /// Throws when Firestore rejects the write, which keeps the sheet open.
+    var onSave: (([GroupEvents]) async throws -> Void)? = nil
 
     @State private var eventName = ""
     @State private var eventDesc = ""
@@ -34,6 +35,8 @@ struct CreatePersonalEventView: View {
     @State private var repeatUntil: Date
     @State private var customRepeatDates: Set<Date> = []
     @State private var isShowingRepeatDates = false
+    @State private var isSaving = false
+    @State private var saveErrorMessage: String?
 
     private let calendar: Calendar = {
         var calendar = Calendar.current
@@ -44,7 +47,7 @@ struct CreatePersonalEventView: View {
     init(
         events: Binding<[GroupEvents]>,
         initialDate: Date = Date(),
-        onSave: (([GroupEvents]) -> Void)? = nil
+        onSave: (([GroupEvents]) async throws -> Void)? = nil
     ) {
         _events = events
         self.onSave = onSave
@@ -182,7 +185,7 @@ struct CreatePersonalEventView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add", systemImage: "checkmark") {
-                        addEvents()
+                        Task { await addEvents() }
                     }
                     .buttonStyle(.glassProminent)
                     .tint(.accent)
@@ -196,6 +199,17 @@ struct CreatePersonalEventView: View {
                     selectedDates: $customRepeatDates
                 )
             }
+            .alert(
+                "Couldn't save event",
+                isPresented: Binding(
+                    get: { saveErrorMessage != nil },
+                    set: { if !$0 { saveErrorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(saveErrorMessage ?? "Please try again.")
+            }
         }
     }
 
@@ -204,9 +218,14 @@ struct CreatePersonalEventView: View {
     }
 
     private var canSave: Bool {
-        !eventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let name = eventName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !name.isEmpty
+            && name.count <= 200
+            && eventDesc.count <= 2000
+            && eventLocation.count <= 200
             && endDate > startDate
             && !occurrenceDates.isEmpty
+            && !isSaving
     }
 
     /// The start time of every event that will be created, including the
@@ -292,7 +311,9 @@ struct CreatePersonalEventView: View {
         }
     }
 
-    private func addEvents() {
+    private func addEvents() async {
+        guard !isSaving else { return }
+        isSaving = true
         let name = eventName.trimmingCharacters(in: .whitespacesAndNewlines)
         let desc = eventDesc.trimmingCharacters(in: .whitespacesAndNewlines)
         let location = eventLocation.trimmingCharacters(
@@ -323,13 +344,17 @@ struct CreatePersonalEventView: View {
         }
         storedColors.wrappedValue = stored
 
-        events.append(contentsOf: created)
-
-        // Persist what was created. The store's snapshot listener will refresh
-        // the list once Firestore confirms the writes.
-        onSave?(created)
-
-        dismiss()
+        do {
+            // Persist first. The local list is updated only once the write is
+            // accepted, so a denial can't leave a phantom event on screen.
+            try await onSave?(created)
+            let existingIDs = Set(events.map(\.id))
+            events.append(contentsOf: created.filter { !existingIDs.contains($0.id) })
+            dismiss()
+        } catch {
+            saveErrorMessage = error.localizedDescription
+            isSaving = false
+        }
     }
 }
 

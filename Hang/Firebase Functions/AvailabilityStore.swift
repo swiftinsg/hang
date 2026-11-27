@@ -160,11 +160,6 @@ final class AvailabilityStore {
         (byGroup[groupID] ?? [:]).compactMapValues(\.updatedAt)
     }
 
-    /// Whether this member has published anything at all for the group.
-    func isSharing(_ uid: String, inGroup groupID: String) -> Bool {
-        byGroup[groupID]?[uid] != nil
-    }
-
     // MARK: - Decoding
 
     private static func decode(_ document: QueryDocumentSnapshot) -> MemberAvailability {

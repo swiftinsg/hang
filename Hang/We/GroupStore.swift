@@ -28,6 +28,9 @@ final class GroupStore {
     /// the group's Firestore document ID, so new hangouts show up for every
     /// member without reopening the app.
     @ObservationIgnored private var eventListeners: [String: ListenerRegistration] = [:]
+    /// A profile edit can land before the group listener's first snapshot. Keep
+    /// it pending so the copied name/avatar is not lost on launch.
+    @ObservationIgnored private var pendingProfileRefresh = false
 
     private init() {}
 
@@ -50,6 +53,9 @@ final class GroupStore {
         let uid = Auth.auth().currentUser?.uid
         guard listener == nil || listeningUID != uid else { return }
 
+        // A new session starts with a clean publishing schedule; groups blocked
+        // when the previous account signed out are valid again for this one.
+        AvailabilityPublisher.shared.resetSession()
         listener?.remove()
         listener = nil
         listeningUID = uid
@@ -60,6 +66,13 @@ final class GroupStore {
         }
 
         let collection = groupsCollection
+        // Groups already on screen have a live event listener, so their events
+        // don't need another one-shot fetch on every group snapshot.
+        let cachedEvents = Dictionary(
+            uniqueKeysWithValues: groups
+                .filter { !$0.documentID.isEmpty }
+                .map { ($0.documentID, $0.events) }
+        )
 
         listener = collection
             .whereField("people", arrayContains: userDocument)
@@ -79,7 +92,8 @@ final class GroupStore {
                     let loaded = await buildGroups(
                         documents: documents,
                         groupsCollection: collection,
-                        currentUserDocument: userDocument
+                        currentUserDocument: userDocument,
+                        cachedEvents: cachedEvents
                     )
 
                     await MainActor.run {
@@ -102,6 +116,15 @@ final class GroupStore {
             registration.remove()
         }
         eventListeners.removeAll()
+
+        // Never carry one account's groups (or publishing schedule) into the
+        // next sign-in.
+        for groupID in groups.map(\.documentID) {
+            AvailabilityPublisher.shared.stopPublishing(to: groupID)
+        }
+        groups = []
+        errorMessage = nil
+        pendingProfileRefresh = false
     }
 
     /// Forces a fresh read of groups and their events for pull-to-refresh.
@@ -116,10 +139,16 @@ final class GroupStore {
             let snapshot = try await groupsCollection
                 .whereField("people", arrayContains: userDocument)
                 .getDocuments()
+            let cachedEvents = Dictionary(
+                uniqueKeysWithValues: groups
+                    .filter { !$0.documentID.isEmpty }
+                    .map { ($0.documentID, $0.events) }
+            )
             let loaded = await buildGroups(
                 documents: snapshot.documents,
                 groupsCollection: groupsCollection,
-                currentUserDocument: userDocument
+                currentUserDocument: userDocument,
+                cachedEvents: cachedEvents
             )
 
             groups = loaded
@@ -142,6 +171,10 @@ final class GroupStore {
             throw GroupStoreError.notSignedIn
         }
 
+        let trimmedName = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(100))
+        let trimmedDesc = String(desc.trimmingCharacters(in: .whitespacesAndNewlines).prefix(2000))
+        guard !trimmedName.isEmpty else { throw GroupStoreError.invalidGroupName }
+
         var code = inviteCode.isEmpty ? Self.randomInviteCode() : inviteCode
         while try await isInviteCodeTaken(code) {
             code = Self.randomInviteCode()
@@ -153,14 +186,16 @@ final class GroupStore {
         guard !AccountDeletionController.shared.isDeleting else {
             throw GroupStoreError.accountDeletionInProgress
         }
+        let name = String(profile.username.prefix(100))
+        let picture = String(profile.picture.rawValue.prefix(32))
 
         let data = GroupData(
             inviteCode: code,
-            name: name,
-            desc: desc,
+            name: trimmedName,
+            desc: trimmedDesc,
             people: [userDocument],
-            memberNames: profile.username.isEmpty ? [:] : [uid: profile.username],
-            memberProfilePictures: [uid: profile.picture.rawValue],
+            memberNames: name.isEmpty ? [:] : [uid: name],
+            memberProfilePictures: [uid: picture],
             eventColor: PersonalEventOutlineColor.randomGroupColor.rawValue
         )
 
@@ -176,12 +211,13 @@ final class GroupStore {
     /// Persists the colour used by this group's shared events. Any member can
     /// change it from More Info; the group listener then updates everyone's
     /// local copy, including the colour attached to each loaded event.
-    func setEventColor(_ color: PersonalEventOutlineColor, for group: TestGroup) async {
+    @discardableResult
+    func setEventColor(_ color: PersonalEventOutlineColor, for group: TestGroup) async -> Bool {
         guard !group.documentID.isEmpty else {
             await MainActor.run {
                 self.errorMessage = GroupStoreError.groupNotSaved.errorDescription
             }
-            return
+            return false
         }
 
         do {
@@ -202,20 +238,20 @@ final class GroupStore {
                 }
                 self.errorMessage = nil
             }
+            return true
         } catch {
             await MainActor.run {
                 self.errorMessage = error.localizedDescription
             }
+            return false
         }
     }
 
-    /// Generates a 6-letter invite code that isn't already in use.
-    func makeUniqueInviteCode() async throws -> String {
-        var code = Self.randomInviteCode()
-        while try await isInviteCodeTaken(code) {
-            code = Self.randomInviteCode()
-        }
-        return code
+    /// Suggests a 6-letter invite code for display while the create sheet is
+    /// open. `createGroup` is the single place that checks uniqueness, so the
+    /// code isn't looked up twice on the way to a write.
+    func suggestedInviteCode() -> String {
+        Self.randomInviteCode()
     }
 
     /// Renames a group. Any member may rename it; Firestore rules allow a
@@ -278,12 +314,14 @@ final class GroupStore {
             throw GroupStoreError.accountDeletionInProgress
         }
 
+        let name = String(profile.username.prefix(100))
+        let picture = String(profile.picture.rawValue.prefix(32))
         var groupUpdate: [String: Any] = [
             "people": FieldValue.arrayUnion([userDocument]),
-            "memberProfilePictures.\(uid)": profile.picture.rawValue
+            "memberProfilePictures.\(uid)": picture
         ]
-        if !profile.username.isEmpty {
-            groupUpdate["memberNames.\(uid)"] = profile.username
+        if !name.isEmpty {
+            groupUpdate["memberNames.\(uid)"] = name
         }
 
         let batch = db.batch()
@@ -293,6 +331,11 @@ final class GroupStore {
             forDocument: userDocument
         )
         try await batch.commit()
+        // Membership has landed, so publishing to this group is allowed again.
+        AvailabilityPublisher.shared.resumePublishing(
+            for: groupDocument.documentID
+        )
+        await MainActor.run { self.errorMessage = nil }
     }
 
     // MARK: - Leaving a group
@@ -342,6 +385,8 @@ final class GroupStore {
                     uid: uid
                 )
             }
+            // Block any in-flight or queued publish from recreating that doc.
+            AvailabilityPublisher.shared.stopPublishing(to: group.documentID)
             await MainActor.run {
                 // Stop watching this group's events now that we're no longer a
                 // member, so stale updates can't keep firing for a group we left.
@@ -358,45 +403,51 @@ final class GroupStore {
     // MARK: - Group events
 
     /// Writes a new event to the group's events subcollection. The event's UUID
-    /// becomes the document ID, mirroring the personal events store.
-    func addEvent(_ event: GroupEvents, to group: TestGroup) {
+    /// becomes the document ID, mirroring the personal events store. Callers
+    /// await this so the editor sheet stays open when a write is denied.
+    @discardableResult
+    func addEvent(_ event: GroupEvents, to group: TestGroup) async throws -> Bool {
         guard !group.documentID.isEmpty else {
-            errorMessage = "This group isn't saved to Firestore yet."
-            return
+            throw GroupStoreError.groupNotSaved
         }
 
         do {
             try eventsCollection(for: group.documentID)
                 .document(event.id.uuidString)
                 .setData(from: GroupEventData(event: event))
+            await MainActor.run { self.errorMessage = nil }
+            return true
         } catch {
-            errorMessage = error.localizedDescription
+            await MainActor.run { self.errorMessage = error.localizedDescription }
+            throw error
         }
     }
 
     /// Saves changes to an existing group event. It reuses the same write as
     /// `addEvent`, overwriting the document at the event's UUID so every member
-    /// sees the edit through the live listener. The edit notification is sent
-    /// from the sheet's `onSave` closure alongside this write.
-    func updateEvent(_ event: GroupEvents, to group: TestGroup) {
-        addEvent(event, to: group)
+    /// sees the edit through the live listener.
+    @discardableResult
+    func updateEvent(_ event: GroupEvents, to group: TestGroup) async throws -> Bool {
+        try await addEvent(event, to: group)
     }
 
     /// Removes a group event. The live listener reflects the deletion to every
     /// member.
-    func deleteEvent(_ eventID: UUID, from group: TestGroup) {
+    @discardableResult
+    func deleteEvent(_ eventID: UUID, from group: TestGroup) async throws -> Bool {
         guard !group.documentID.isEmpty else {
-            errorMessage = "This group isn't saved to Firestore yet."
-            return
+            throw GroupStoreError.groupNotSaved
         }
-        Task {
-            do {
-                try await eventsCollection(for: group.documentID)
-                    .document(eventID.uuidString)
-                    .delete()
-            } catch {
-                self.errorMessage = error.localizedDescription
-            }
+
+        do {
+            try await eventsCollection(for: group.documentID)
+                .document(eventID.uuidString)
+                .delete()
+            await MainActor.run { self.errorMessage = nil }
+            return true
+        } catch {
+            await MainActor.run { self.errorMessage = error.localizedDescription }
+            throw error
         }
     }
 
@@ -468,9 +519,15 @@ final class GroupStore {
 
         for documentID in Array(eventListeners.keys) where !liveIDs.contains(documentID) {
             stopListeningToEvents(for: documentID)
+            AvailabilityPublisher.shared.stopPublishing(to: documentID)
         }
         for group in groups where !group.documentID.isEmpty {
             startListeningToEvents(for: group)
+        }
+
+        if pendingProfileRefresh && !liveIDs.isEmpty {
+            pendingProfileRefresh = false
+            Task { await self.refreshMyProfile() }
         }
     }
 
@@ -507,24 +564,37 @@ final class GroupStore {
         // `groupsIn` reference would be denied by the tightened rules and could
         // fail the entire batch, so it is deliberately not used here.
         let ids = Set(groups.map(\.documentID).filter { !$0.isEmpty })
-        guard !ids.isEmpty else { return }
+        guard !ids.isEmpty else {
+            pendingProfileRefresh = true
+            return
+        }
+        pendingProfileRefresh = false
 
+        // Rules cap both copied values; truncate here so one long name can't
+        // deny a batch for every group at once.
+        let name = String(profile.username.prefix(100))
+        let picture = String(selectedPicture.rawValue.prefix(32))
         var update: [String: Any] = [
-            "memberProfilePictures.\(uid)": selectedPicture.rawValue
+            "memberProfilePictures.\(uid)": picture
         ]
-        if !profile.username.isEmpty {
-            update["memberNames.\(uid)"] = profile.username
+        if name.isEmpty {
+            update["memberNames.\(uid)"] = FieldValue.delete()
+        } else {
+            update["memberNames.\(uid)"] = name
         }
 
-        let batch = db.batch()
-        for id in ids {
-            batch.updateData(update, forDocument: groupsCollection.document(id))
-        }
         // The profile read above can finish after account deletion has begun.
         // Do not let that older operation recreate membership data afterward.
         guard !AccountDeletionController.shared.isDeleting else { return }
+
         do {
-            try await batch.commit()
+            for chunk in ids.sorted().chunks(of: 400) {
+                let batch = db.batch()
+                for id in chunk {
+                    batch.updateData(update, forDocument: groupsCollection.document(id))
+                }
+                try await batch.commit()
+            }
             await MainActor.run { self.errorMessage = nil }
         } catch {
             await MainActor.run { self.errorMessage = error.localizedDescription }
@@ -546,10 +616,22 @@ final class GroupStore {
     }
 }
 
+extension Array {
+    /// Splits a collection into batches small enough for Firestore's 500-write
+    /// limit. Used by profile fan-out and account cleanup.
+    func chunks(of size: Int) -> [[Element]] {
+        guard size > 0 else { return [] }
+        return stride(from: 0, to: count, by: size).map { start in
+            Array(self[start..<Swift.min(start + size, count)])
+        }
+    }
+}
+
 enum GroupStoreError: LocalizedError {
     case notSignedIn
     case groupNotFound
     case groupNotSaved
+    case invalidGroupName
     case accountDeletionInProgress
 
     var errorDescription: String? {
@@ -560,6 +642,8 @@ enum GroupStoreError: LocalizedError {
             return "Group not found. Please double-check the entered group code."
         case .groupNotSaved:
             return "This group isn't saved to Firestore yet."
+        case .invalidGroupName:
+            return "Please enter a group name."
         case .accountDeletionInProgress:
             return "Account deletion is in progress."
         }
@@ -571,17 +655,25 @@ enum GroupStoreError: LocalizedError {
 private func buildGroups(
     documents: [QueryDocumentSnapshot],
     groupsCollection: CollectionReference,
-    currentUserDocument: DocumentReference?
+    currentUserDocument: DocumentReference?,
+    cachedEvents: [String: [GroupEvents]]
 ) async -> [TestGroup] {
     var loaded: [TestGroup] = []
 
     for document in documents {
         guard let data = try? document.data(as: GroupData.self) else { continue }
 
-        let events = await loadGroupEvents(
-            for: document.documentID,
-            groupsCollection: groupsCollection
-        )
+        // Only fetch events once for a group we haven't loaded yet. Afterwards
+        // the per-group live listener keeps them current.
+        let events: [GroupEvents]
+        if let cached = cachedEvents[document.documentID], !cached.isEmpty {
+            events = cached
+        } else {
+            events = await loadGroupEvents(
+                for: document.documentID,
+                groupsCollection: groupsCollection
+            )
+        }
 
         loaded.append(
             data.testGroup(

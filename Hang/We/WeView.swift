@@ -23,8 +23,6 @@ struct WeView: View {
     let columns = [
         GridItem(.adaptive(minimum: 150), spacing: 16)
     ]
-    @FocusState var isFocused: Bool
-
     var body: some View {
         @Bindable var store = store
 
@@ -109,7 +107,7 @@ struct GroupCard: View {
     let members: [Person]
     var body: some View {
         ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 24)
                 .fill(.accent.mix(with: .white, by: 0.25))
                 .shadow(color: .black.opacity(0.15), radius: 16)
             //                .fill(Color(.secondarySystemBackground))

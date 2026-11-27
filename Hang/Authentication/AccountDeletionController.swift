@@ -90,14 +90,9 @@ final class AccountDeletionController: NSObject {
             if (error as? ASAuthorizationError)?.code != .canceled {
                 errorMessage = error.localizedDescription
             }
-
-            // Upload calendar changes made while the Apple prompt was visible.
-            let pendingGroups = AvailabilityPublisher.shared.resumePublishing()
-            await AvailabilityPublisher.shared.refresh(
-                groups: pendingGroups,
-                uid: user.uid,
-                force: true
-            )
+            // Do NOT republish queued groups here: cleanup may already have
+            // removed this user from them. `defer` resumes publishing, and the
+            // next normal membership sync publishes only current groups.
         }
     }
 

@@ -111,21 +111,6 @@ enum DayKey {
             parts.day ?? 0
         )
     }
-
-    static func date(from key: String, in timeZone: TimeZone) -> Date? {
-        let parts = key.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return nil }
-
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        return calendar.date(
-            from: DateComponents(
-                year: parts[0],
-                month: parts[1],
-                day: parts[2]
-            )
-        )
-    }
 }
 
 // MARK: - Shared availability
@@ -166,11 +151,6 @@ struct MemberAvailability: Hashable {
 
     /// How long a shared snapshot stays trustworthy before the UI calls it stale.
     static let staleAfter: TimeInterval = 48 * 60 * 60
-
-    func isStale(now: Date = Date()) -> Bool {
-        guard let updatedAt else { return true }
-        return now.timeIntervalSince(updatedAt) > Self.staleAfter
-    }
 }
 
 /// What the UI is allowed to claim about a member.

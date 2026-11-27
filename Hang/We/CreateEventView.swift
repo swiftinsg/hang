@@ -11,6 +11,8 @@ struct CreateEventView: View {
     @State private var eventLocation = ""
     @State private var startDate: Date
     @State private var endDate: Date
+    @State private var isSaving = false
+    @State private var saveErrorMessage: String?
 
     init(tg: Binding<TestGroup>, initialDate: Date = Date()) {
         _tg = tg
@@ -64,35 +66,66 @@ struct CreateEventView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add", systemImage: "checkmark") {
-                        let event = GroupEvents(
-                            name: eventName.trimmingCharacters(
-                                in: .whitespacesAndNewlines
-                            ),
-                            desc: eventDesc.trimmingCharacters(
-                                in: .whitespacesAndNewlines
-                            ),
-                            location: eventLocation.trimmingCharacters(
-                                in: .whitespacesAndNewlines
-                            ),
-                            time: startDate.timeIntervalSince1970,
-                            endTime: endDate.timeIntervalSince1970,
-                            groupColor: tg.eventColor.hangColor ?? .blue
-                        )
-                        tg.events.append(event)
-                        GroupStore.shared.addEvent(event, to: tg)
-                        dismiss()
+                        Task { await addEvent() }
                     }
                     .buttonStyle(.glassProminent)
                     .tint(.accent)
                     .disabled(!canSave)
                 }
             }
+            .alert(
+                "Couldn't save event",
+                isPresented: Binding(
+                    get: { saveErrorMessage != nil },
+                    set: { if !$0 { saveErrorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(saveErrorMessage ?? "Please try again.")
+            }
         }
     }
 
     private var canSave: Bool {
-        !eventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let name = eventName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !name.isEmpty
+            && name.count <= 200
+            && eventDesc.count <= 2000
+            && eventLocation.count <= 200
             && endDate > startDate
+            && !isSaving
+    }
+
+    private func addEvent() async {
+        guard !isSaving else { return }
+        isSaving = true
+        let event = GroupEvents(
+            name: eventName.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ),
+            desc: eventDesc.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ),
+            location: eventLocation.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ),
+            time: startDate.timeIntervalSince1970,
+            endTime: endDate.timeIntervalSince1970,
+            groupColor: tg.eventColor.hangColor ?? .blue
+        )
+
+        do {
+            try await GroupStore.shared.addEvent(event, to: tg)
+            // The live listener may have landed before the write returned.
+            if !tg.events.contains(where: { $0.id == event.id }) {
+                tg.events.append(event)
+            }
+            dismiss()
+        } catch {
+            saveErrorMessage = error.localizedDescription
+            isSaving = false
+        }
     }
 }
 

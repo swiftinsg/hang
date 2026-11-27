@@ -51,12 +51,7 @@ struct CreateGroupView: View {
             }
         }
         .task {
-            do {
-                code = try await store.makeUniqueInviteCode()
-            } catch {
-                errorMessage = error.localizedDescription
-                showError = true
-            }
+            code = store.suggestedInviteCode()
         }
     }
 
