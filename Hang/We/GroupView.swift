@@ -393,6 +393,38 @@ struct CalendarView: View {
                 event.startDate < dayEnd && event.endDate > dayStart
             }
 
+        // When several events cover the day, the longest one decides the
+        // outline colour, matching the personal calendar's month grid.
+        let dayEvents: [CalendarDayEvent] = {
+            guard !isPastDate else { return [] }
+            var events = tg.events.compactMap {
+                CalendarDayEvent.group(
+                    $0,
+                    dayStart: dayStart,
+                    dayEnd: dayEnd
+                )
+            }
+            events += personalStore.events.compactMap {
+                CalendarDayEvent.personal(
+                    $0,
+                    storedColors: storedColors.wrappedValue,
+                    dayStart: dayStart,
+                    dayEnd: dayEnd
+                )
+            }
+            events += calendarStore.events(on: date, calendar: calendar)
+                .compactMap {
+                    CalendarDayEvent.imported(
+                        $0,
+                        storedColors: storedColors.wrappedValue,
+                        dayStart: dayStart,
+                        dayEnd: dayEnd
+                    )
+                }
+            return events
+        }()
+        let outlineColor = CalendarDayOutline.color(for: dayEvents)
+
         let isTopAvailable =
             !isPastDate
             && topAvailableDays.contains(calendar.startOfDay(for: date))
@@ -411,8 +443,8 @@ struct CalendarView: View {
                 .frame(maxWidth: .infinity, minHeight: 45)
                 .foregroundStyle(
                     isPastDate
-                        ? Color.secondary.opacity(0.45)
-                        : (isCurrentMonth ? Color.primary : Color.secondary)
+                    ? Color.secondary.opacity(0.45)
+                    : (isCurrentMonth ? Color.primary : Color.secondary)
                 )
                 .background {
                     if isPastDate {
@@ -428,31 +460,14 @@ struct CalendarView: View {
                                     isCurrentMonth ? shading : shading * 0.4
                                 )
                             )
+                            .onGeometryChange(for: CGSize.self) { proxy in
+                                proxy.size
+                            } action: { newSize in
+                                cellSize = newSize
+                            }
                     }
                 }
-                .overlay(alignment: .bottom) {
-                    HStack(spacing: 2) {
-                        if hasGroupEvents {
-                            Image("flatTripleHang")
-                                .resizable()
-                                .scaledToFit()
-                                .scaleEffect(0.9)
-                                .offset(y: cellSize.height * 0.18)
-                        }
-                    }
-                }
-                .overlay {
-                    // Most available days of the month.
-                    if isTopAvailable {
-                        Image("topAvailableHang")
-                            .resizable()
-                            .scaledToFit()
-                            .scaleEffect(0.5)
-                            .offset(y: cellSize.height * 0.3)
-                            .offset(x: cellSize.height * 4)
-
-                    }
-                }
+                
                 .overlay {
                     if isTopAvailable {
                         RoundedRectangle(cornerRadius: 8)
@@ -465,12 +480,36 @@ struct CalendarView: View {
                             )
                     }
                 }
-
+            
+//                .overlay {
+//                    // Days that already have an event use the colour of the
+//                    // event that spends the most time on that day.
+//                    if let outlineColor {
+//                        RoundedRectangle(cornerRadius: 6)
+//                            .strokeBorder(outlineColor, lineWidth: 2)
+//                    }
+//                }
+                
+                .overlay(alignment: .bottom) {
+                    HStack(spacing: 2) {
+                        if hasGroupEvents {
+                            Image("flatTripleHang")
+                                .resizable()
+                                .scaledToFit()
+                                .scaleEffect(0.9)
+                                .offset(y: cellSize.height * 0.15)
+                        }
+                    }
+                }
                 .overlay {
-                    // Days that already have an event.
-                    if hasGroupEvents {
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Color.blue, lineWidth: 2)
+                    // Most available days of the month.
+                    if isTopAvailable && !hasGroupEvents {
+                        Image("topAvailable")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: cellSize.width * 0.35, height: cellSize.height * 0.35)
+                            .offset(x: cellSize.width * 0.33, y: cellSize.height * 0.33)
+                        
                     }
                 }
                 .overlay {
@@ -551,7 +590,7 @@ struct EventView: View {
     var body: some View {
         Group {
             if $tg.events.isEmpty {
-                ContentUnavailableView("No Events", systemImage: "tray", description: Text("Go arrange a hangout with your friends!"))
+                ContentUnavailableView("No Events", image:"trayHang", description: Text("Go arrange a hangout with your friends!"))
             } else {
                 List {
                     ForEach($tg.events) { $event in
@@ -698,28 +737,7 @@ struct MoreInfoView: View {
             }
             .listRowBackground(Color(.secondarySystemBackground))
 
-            Section("Event Color") {
-                EventColorPicker(
-                    selection: Binding(
-                        get: { tg.eventColor },
-                        set: { newColor in
-                            tg.eventColor = newColor
-                            Task {
-                                await GroupStore.shared.setEventColor(
-                                    newColor,
-                                    for: tg
-                                )
-                            }
-                        }
-                    ),
-                    includeAutomatic: false
-                )
-                Text("All events from this group use this color.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .listRowBackground(Color(.secondarySystemBackground))
-
+            
             //            Section("Description") {
             //                Text(tg.desc)
             //                Button("Edit description", systemImage: "pencil") {}
@@ -742,6 +760,28 @@ struct MoreInfoView: View {
                         }
                     }
                 }
+            }
+            .listRowBackground(Color(.secondarySystemBackground))
+            Section("Group Event Color") {
+                EventColorPicker(
+                    selection: Binding(
+                        get: { tg.eventColor },
+                        set: { newColor in
+                            tg.eventColor = newColor
+                            Task {
+                                await GroupStore.shared.setEventColor(
+                                    newColor,
+                                    for: tg
+                                )
+                            }
+                        }
+                    ),
+                    includeAutomatic: false,
+                    usesGroupPalette: true
+                )
+//                Text("All events from this group use this color.")
+//                    .font(.caption)
+//                    .foregroundStyle(.secondary)
             }
             .listRowBackground(Color(.secondarySystemBackground))
 

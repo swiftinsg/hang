@@ -215,10 +215,16 @@ struct EventOutlineColorMenu: View {
 }
 
 /// Palette row used in the create/edit screens and group More Info screen.
+/// The swatches are drawn directly instead of using a plain `Picker`, whose
+/// rows and checkmark are tinted with the app's accent colour rather than the
+/// colour the user actually chose.
 struct EventColorPicker: View {
     @Binding var selection: PersonalEventOutlineColor
     /// Groups always have a real colour, so "Automatic" can be hidden.
     var includeAutomatic: Bool = true
+    /// Group events render with the `HangColors` palette. Show those exact
+    /// colours here so the swatch matches what the group's events will use.
+    var usesGroupPalette: Bool = false
 
     private var options: [PersonalEventOutlineColor] {
         includeAutomatic
@@ -227,19 +233,90 @@ struct EventColorPicker: View {
     }
 
     var body: some View {
-        Picker("Color", selection: $selection) {
+        LazyVGrid(
+            columns: Array(
+                repeating: GridItem(.flexible(), spacing: 8),
+                count: 5
+            ),
+            spacing: 12
+        ) {
             ForEach(options) { option in
-                Label {
-                    Text(option.label)
-                } icon: {
-                    Image(
-                        systemName: option.color == nil
-                            ? "circle.dashed" : "circle.fill"
-                    )
-                    .tint(option.color ?? .secondary)
-                }
-                .tag(option)
+                swatchButton(for: option)
             }
         }
+    }
+
+    private func swatchColor(
+        for option: PersonalEventOutlineColor
+    ) -> Color {
+        if usesGroupPalette, let hangColor = option.hangColor {
+            return hangColor.col
+        }
+        return option.color ?? .secondary
+    }
+
+    private func checkmarkColor(
+        for option: PersonalEventOutlineColor
+    ) -> Color {
+        guard option.color != nil else { return .primary }
+        // The group palette is all pastel, so a dark checkmark reads best.
+        if usesGroupPalette { return .black }
+        // In the system palette these are the light swatches where a white
+        // checkmark would be hard to see.
+        switch option {
+        case .yellow, .orange, .cyan, .green:
+            return .black
+        default:
+            return .white
+        }
+    }
+
+    private func swatchButton(
+        for option: PersonalEventOutlineColor
+    ) -> some View {
+        let isSelected = selection == option
+        let color = swatchColor(for: option)
+
+        return Button {
+            selection = option
+        } label: {
+            VStack(spacing: 4) {
+                ZStack {
+                    if option.color == nil {
+                        Circle()
+                            .strokeBorder(
+                                Color.secondary,
+                                style: StrokeStyle(lineWidth: 2, dash: [3, 2])
+                            )
+                    } else {
+                        Circle()
+                            .fill(color)
+                    }
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                            .font(.caption2.bold())
+                            .foregroundStyle(checkmarkColor(for: option))
+                    }
+                }
+                .frame(width: 32, height: 32)
+                .overlay {
+                    if isSelected {
+                        Circle()
+                            .strokeBorder(color, lineWidth: 2)
+                            .padding(-3)
+                    }
+                }
+
+                Text(option == .automatic ? "Auto" : option.label)
+                    .font(.caption2)
+                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(option.label)
+        .accessibilityAddTraits(isSelected ? AccessibilityTraits.isSelected : [])
     }
 }

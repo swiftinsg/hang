@@ -75,7 +75,8 @@ struct CreateEventView: View {
                                 in: .whitespacesAndNewlines
                             ),
                             time: startDate.timeIntervalSince1970,
-                            endTime: endDate.timeIntervalSince1970
+                            endTime: endDate.timeIntervalSince1970,
+                            groupColor: tg.eventColor.hangColor ?? .blue
                         )
                         tg.events.append(event)
                         GroupStore.shared.addEvent(event, to: tg)
