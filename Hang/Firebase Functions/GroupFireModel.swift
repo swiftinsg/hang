@@ -120,10 +120,10 @@ struct GroupData: Codable {
         let resolvedColor =
             PersonalEventOutlineColor(rawValue: eventColor)
             ?? .stableColor(forID: documentID)
-        let resolvedSwiftUIColor = resolvedColor.color ?? .blue
+        let resolvedHangColor = resolvedColor.hangColor ?? .blue
         let coloredEvents = events.map { event -> GroupEvents in
             var colored = event
-            colored.groupColor = resolvedSwiftUIColor
+            colored.groupColor = resolvedHangColor
             return colored
         }
 

@@ -41,7 +41,7 @@ struct DayAvailabilityView: View {
     /// segments and event list. Never written to Firestore.
     var storedColors: Binding<[String: String]> = .constant([:])
     /// Colour shared by this group's events, chosen in the group's More Info.
-    var groupColor: Color = .blue
+    var groupColor: HangColors = HangColors.blue
 
     /// Called when a group event block is tapped. Personal events stay read
     /// only in the shared calendar.
@@ -488,7 +488,7 @@ struct DayAvailabilityView: View {
                 start: eventStart(event),
                 end: eventEnd(event),
                 title: event.name,
-                color: event.groupColor ?? groupColor,
+                color: event.groupColor.col,
                 contentWidth: contentWidth,
                 onTap: {
                     onEditGroupEvent?(event)

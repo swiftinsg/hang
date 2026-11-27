@@ -194,10 +194,10 @@ final class GroupStore {
                     $0.documentID == group.documentID
                 }) else { return }
                 self.groups[index].eventColor = color
-                let swiftUIColor = color.color ?? .blue
+                let hangColor = color.hangColor ?? .blue
                 self.groups[index].events = self.groups[index].events.map { event in
                     var colored = event
-                    colored.groupColor = swiftUIColor
+                    colored.groupColor = hangColor
                     return colored
                 }
                 self.errorMessage = nil
@@ -407,7 +407,7 @@ final class GroupStore {
                     }
                     // Keep the group's display colour on each event so the
                     // personal calendar can tint every group's mini-bar bar.
-                    let groupColor = self.groups[index].eventColor.color ?? .blue
+                    let groupColor = self.groups[index].eventColor.hangColor ?? .blue
                     self.groups[index].events = events.map { event in
                         var colored = event
                         colored.groupColor = groupColor

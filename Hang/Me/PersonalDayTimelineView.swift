@@ -22,7 +22,7 @@ struct PersonalDayTimelineView: View {
     /// both the timeline and the month grid. Never written to Firestore.
     @Binding var storedColors: [String: String]
     /// Fallback colour for group events loaded without a saved group colour.
-    var groupColor: Color = .blue
+    var groupColor: HangColors = HangColors.blue
 
     /// Called when a personal event is tapped. Group events stay read only on
     /// this screen because they belong to the We calendar.
@@ -257,7 +257,7 @@ struct PersonalDayTimelineView: View {
     private func groupEventRow(_ event: GroupEvents) -> some View {
         // Group events all use the colour set for their group in More Info.
         HStack(alignment: .top, spacing: 8) {
-            colorBar(color: event.groupColor ?? groupColor)
+            colorBar(color: event.groupColor.col)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(event.name)
@@ -356,7 +356,7 @@ struct PersonalDayTimelineView: View {
                         .timeIntervalSince1970,
                     endTime: (calendar.date(byAdding: .hour, value: 20, to: day) ?? today)
                         .timeIntervalSince1970,
-                    groupColor: .blue
+                    groupColor: HangColors.blue
                 )
             ],
             calendar: calendar,

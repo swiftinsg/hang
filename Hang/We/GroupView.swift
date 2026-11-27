@@ -261,7 +261,7 @@ struct CalendarView: View {
                     personalEvents: personalStore.events,
                     importedEvents: calendarStore.events,
                     storedColors: storedColors,
-                    groupColor: tg.eventColor.color ?? .blue,
+                    groupColor: tg.eventColor.hangColor ?? .blue,
                     onEditGroupEvent: { event in
                         activeSheet = .edit(event)
                     }

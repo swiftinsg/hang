@@ -31,7 +31,11 @@ struct MeView: View {
                     personalEvents: $personalStore.events,
                     // Every group the user belongs to, not just the first one.
                     // Each event carries its group's display colour.
-                    groupEvents: groupStore.groups.flatMap(\.events)
+                    //groupEvents: groupStore.groups.flatMap(\.events)
+                    groupEvents: [
+                        GroupEvents(name: "lala", time: 1795200000),
+                        GroupEvents(name: "lala", time: 1795750000)
+                    ]
                 )
             }
             .navigationTitle("My Calendar")
@@ -53,7 +57,6 @@ struct MeView: View {
 
 struct PersonalCalendarView: View {
     var sizing = Sizing()
-    var colors = Colors()
     @Binding var personalEvents: [GroupEvents]
     let groupEvents: [GroupEvents]
     
@@ -67,6 +70,7 @@ struct PersonalCalendarView: View {
     @State private var activeSheet: PersonalCalendarSheet?
     @State private var calendarStore = PersonalCalendarStore.shared
     @State private var personalStore = PersonalEventsStore.shared
+    @State var cellSize: CGSize = .zero
     
     /// Per-event outline colours are local to this device, never online.
     @AppStorage(PersonalEventColors.storageKey) private var colorsJSON: String = PersonalEventColors.emptyJSON
@@ -316,7 +320,6 @@ struct PersonalCalendarView: View {
         let dayEnd =
         calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
         // Highlight every day an event covers, including the days in between its start and end, so selecting a middle day still shows the event.
-        var cellSize: CGSize = .zero
         var groupEventsToday = groupEvents.filter { event in
             event.startDate < dayEnd && event.endDate > dayStart
         }
@@ -329,10 +332,10 @@ struct PersonalCalendarView: View {
         var hasGroupEvents = !groupEventsToday.isEmpty
         var eventsToday = {
             var groupEventTimes: [EventTime] = {
-                groupEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor ?? Color.gray) }
+                groupEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor.col) }
             }()
             groupEventTimes +=  {
-                personalEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor ?? Color.gray) }
+                personalEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor.col) }
             }()
             let personalEventTimes: [EventTime] = {
                 savedEventsToday.compactMap {
@@ -343,7 +346,7 @@ struct PersonalCalendarView: View {
                             in: storedColors.wrappedValue,
                             for: PersonalEventColorKey.imported($0.id),
                             default: .gray
-                    ))
+                        ))
                 }
             }()
             let sortedTimes = groupEventTimes + personalEventTimes.sorted {
@@ -369,30 +372,40 @@ struct PersonalCalendarView: View {
                     .font(.subheadline)
                     .foregroundStyle(isCurrentMonth ? Color.primary : Color.secondary)
                 if hasGroupEvents || hasCalendarEvents {
-                    ZStack(alignment: .leading) {
+                    ZStack() {
                         Capsule()
                             .frame(width: cellSize.width*capsWidth, height: cellSize.height*0.1)
                             .foregroundStyle(.black.opacity(0.05))
                         ForEach(0..<eventsToday.0.count, id: \.self) { x in
-                            let xnum = CGFloat(eventsToday.0[x].start - eventsToday.2)
-                            let xdenom = CGFloat(eventsToday.1)*cellSize.width*capsWidth
-                            let offsetX = xnum/xdenom
-                            let eventWidth = max(CGFloat(eventsToday.0[x].dur / eventsToday.1)*cellSize.width*capsWidth, 2)
+                            let xfract = CGFloat(eventsToday.0[x].start - eventsToday.2)/CGFloat(eventsToday.1)
+                            let wfract = CGFloat(eventsToday.0[x].dur / eventsToday.1)
+                            let offsetX = (xfract)*cellSize.width*capsWidth
+                            let eventWidth = wfract*cellSize.width*capsWidth
                             Capsule()
                                 .foregroundStyle(eventsToday.0[x].color)
-                                .frame(width: eventWidth, height: cellSize.height*0.1)
+                                .frame(width: max(eventWidth, cellSize.height*0.1), height: cellSize.height*0.1)
                                 .offset(x: offsetX)
                             
                         }
+                        if hasGroupEvents {
+                            groupEventsToday.first?.groupColor.img
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: cellSize.width*capsWidth*0.7)
+                                .offset(y: -cellSize.height*0.11)
+                            
+                        }
                     }
+                    .padding(.top, cellSize.height*0.1)
                 }
             }
+            .offset(y: cellSize.height*0.05)
             .frame(maxWidth: .infinity, minHeight: 45)
             .overlay {
                 ZStack {
                     if hasGroupEvents {
                         RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Colors().green.col, lineWidth: 2)
+                            .strokeBorder(groupEventsToday.first?.groupColor.col ?? HangColors.green.col, lineWidth: 2)
                             .padding(2)
                     } else if hasCalendarEvents {
                         RoundedRectangle(cornerRadius: 6)
@@ -405,59 +418,13 @@ struct PersonalCalendarView: View {
                     }
                 }
             }
-            .onChange(of: personalEvents) {
-                groupEventsToday = groupEvents.filter { event in
-                    event.startDate < dayEnd && event.endDate > dayStart
-                }
-                savedEventsToday = calendarStore.events(on: date, calendar: calendar)
-                personalEventsToday = personalEvents.filter { event in
-                    event.startDate < dayEnd && event.endDate > dayStart
-                }
-                hasCalendarEvents =
-                !personalEventsToday.isEmpty || !savedEventsToday.isEmpty
-                hasGroupEvents = !groupEventsToday.isEmpty
-                eventsToday = {
-                    var groupEventTimes: [EventTime] = {
-                        groupEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor ?? Color.gray) }
-                    }()
-                    groupEventTimes +=  {
-                        personalEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor ?? Color.gray) }
-                    }()
-                    let personalEventTimes: [EventTime] = {
-                        savedEventsToday.compactMap {
-                            EventTime(
-                                start: $0.startDate.timeIntervalSince1970,
-                                dur: $0.endDate.timeIntervalSince($0.startDate),
-                                color: PersonalEventColors.color(
-                                    in: storedColors.wrappedValue,
-                                    for: PersonalEventColorKey.imported($0.id),
-                                    default: .gray
-                            ))
-                        }
-                    }()
-                    let sortedTimes = groupEventTimes + personalEventTimes.sorted {
-                        if $0.start == $1.start { return $0.dur > $1.dur }
-                        return $0.start < $1.start
-                    }
-                    let firstTime = sortedTimes.first?.start
-                    let lastTime = sortedTimes.map { $0.start + $0.dur }.max()
-                    return (sortedTimes, (lastTime ?? 86400.0)-(firstTime ?? 0), (firstTime ?? 0), ((lastTime ?? 86400.0)))
-                }()
-                capsWidth = {
-                    if hasGroupEvents {
-                        return 0.6
-                    } else {
-                        return 0.65
-                    }
-                }()
-            }
             .onGeometryChange(for: CGSize.self) { proxy in
                 proxy.size
             } action: { newSize in
                 cellSize = newSize
             }
         }
-
+    }
     // Floating action button, pinned to the bottom of the screen so it stays
     // reachable while the calendar page is scrolled.
     private var createEventButton: some View {

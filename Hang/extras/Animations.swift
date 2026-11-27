@@ -3,14 +3,30 @@ import SwiftUI
 
 
 
-public struct Colors {
-    let red = (col: Color(red: 1.0, green: 0.55, blue: 0.55), img: Image("FlatRedHang"))
-    let yellow = (col: Color(red: 1.0, green: 0.85, blue: 0.55), img: Image("FlatYellowHang"))
-    let green = (col: Color(red: 0.55, green: 1.0, blue: 0.55), img: Image("FlatYellowHang"))
-    let cyan = (col: Color(red: 0.55, green: 1.0, blue: 0.85), img: Image("FlatYellowHang"))
-    let blue = (col: Color(red: 0.55, green: 0.55, blue: 1.0), img: Image("FlatYellowHang"))
-    let pink = (col: Color(red: 1.0, green: 0.55, blue: 0.85), img: Image("FlatYellowHang"))
+public enum HangColors: Equatable, CaseIterable {
+    case red, yellow, green, cyan, blue, pink
+    public var col: Color {
+        switch self {
+        case .red:    return Color(red: 1.0, green: 0.55, blue: 0.55)
+        case .yellow: return Color(red: 1.0, green: 0.85, blue: 0.55)
+        case .green:  return Color(red: 0.55, green: 1.0, blue: 0.55)
+        case .cyan:   return Color(red: 0.55, green: 1.0, blue: 0.85)
+        case .blue:   return Color(red: 0.55, green: 0.55, blue: 1.0)
+        case .pink:   return Color(red: 1.0, green: 0.55, blue: 0.85)
+        }
+    }
+    public var img: Image {
+        switch self {
+        case .red:    return Image("FlatRedHang")
+        case .yellow: return Image("FlatYellowHang")
+        case .green:  return Image("FlatGreenHang")
+        case .cyan:   return Image("FlatCyanHang")
+        case .blue:   return Image("FlatBlueHang")
+        case .pink:   return Image("FlatPinkHang")
+        }
+    }
 }
+
 
 
 struct Sizing: DynamicProperty {
@@ -73,7 +89,7 @@ public struct GroupEvents: Hashable, Identifiable {
     /// Display-only colour inherited from the group this event came from.
     /// Personal events leave it nil and use the device-local colour choice.
     /// It is never written to Firestore: `GroupEventData` owns the wire format.
-    var groupColor: Color? = nil
+    var groupColor: HangColors = .green
 
     /// `id` can be supplied so events loaded from Firestore keep the same
     /// identity across refreshes (the document ID is stored as a UUID).
@@ -84,7 +100,7 @@ public struct GroupEvents: Hashable, Identifiable {
         location: String = "",
         time: Double,
         endTime: Double? = nil,
-        groupColor: Color? = nil
+        groupColor: HangColors = .green
     ) {
         self.id = id
         self.name = name

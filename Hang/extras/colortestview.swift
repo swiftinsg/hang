@@ -5,7 +5,7 @@ struct colorView: View {
         VStack {
             Color(.orange)
                 .padding(-5)
-            Color(Colors().red.col)
+            Color(HangColors.red.col)
                 .padding(-5)
         }
         .ignoresSafeArea()

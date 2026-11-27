@@ -61,6 +61,32 @@ public enum PersonalEventOutlineColor: String, CaseIterable, Identifiable {
             return .yellow
         }
     }
+
+    /// The closest colour in the `HangColors` palette used by group events.
+    /// `HangColors` has no orange or purple, so those two map to their nearest
+    /// neighbour instead of growing the palette.
+    var hangColor: HangColors? {
+        switch self {
+        case .automatic:
+            return nil
+        case .orange:
+            return .yellow
+        case .red:
+            return .red
+        case .pink:
+            return .pink
+        case .purple:
+            return .blue
+        case .blue:
+            return .blue
+        case .cyan:
+            return .cyan
+        case .green:
+            return .green
+        case .yellow:
+            return .yellow
+        }
+    }
 }
 
 /// Stable keys so a colour keeps following an event across Firestore refreshes
