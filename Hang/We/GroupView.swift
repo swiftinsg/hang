@@ -42,7 +42,7 @@ struct GroupView: View {
                         isRenaming = true
                     } label: {
                         HStack(spacing: 8) {
-                            Text("name")
+                            Text(tg.name)
                                 .font(.largeTitle.bold())
                                 .fontWeight(.bold)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -530,17 +530,7 @@ struct CalendarView: View {
 //                    }
 //                }
                 
-                .overlay(alignment: .bottom) {
-                    HStack(spacing: 2) {
-                        if hasGroupEvents {
-                            Image("flatTripleHang")
-                                .resizable()
-                                .scaledToFit()
-                                .scaleEffect(0.9)
-                                .offset(y: cellSize.height * 0.15)
-                        }
-                    }
-                }
+                
                 .overlay {
                     // Most available days of the month.
                     if isTopAvailable && !hasGroupEvents {
@@ -556,6 +546,17 @@ struct CalendarView: View {
                     if isSelected {
                         RoundedRectangle(cornerRadius: 8)
                             .strokeBorder(Color.accentColor, lineWidth: 2.5)
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    HStack(spacing: 2) {
+                        if hasGroupEvents {
+                            Image("flatTripleHang")
+                                .resizable()
+                                .scaledToFit()
+                                .scaleEffect(0.9)
+                                .offset(y: cellSize.height * 0.15)
+                        }
                     }
                 }
         }
@@ -745,6 +746,35 @@ struct MoreInfoView: View {
     @State private var isConfirmingLeave = false
     @State private var isFilled = false
     @State private var resetTask: Task<Void, Never>?
+    /// Local mirror of the group colour. The picker reads this so a tap is
+    /// reflected immediately instead of waiting for the Firestore write and
+    /// the resulting group snapshot to round-trip back into the binding.
+    @State private var selectedEventColor: PersonalEventOutlineColor = .blue
+
+    private var eventColorBinding: Binding<PersonalEventOutlineColor> {
+        Binding(
+            get: { selectedEventColor },
+            set: { applyEventColor($0) }
+        )
+    }
+
+    private func applyEventColor(_ color: PersonalEventOutlineColor) {
+        selectedEventColor = color
+        tg.eventColor = color
+
+        // Keep this device's loaded events in step right away; the store also
+        // does this after the write lands, for every member.
+        let hangColor = color.hangColor ?? .blue
+        tg.events = tg.events.map { event in
+            var colored = event
+            colored.groupColor = hangColor
+            return colored
+        }
+
+        Task {
+            await GroupStore.shared.setEventColor(color, for: tg)
+        }
+    }
 
     var body: some View {
         List {
@@ -804,18 +834,7 @@ struct MoreInfoView: View {
             .listRowBackground(Color(.secondarySystemBackground))
             Section("Group Event Color") {
                 EventColorPicker(
-                    selection: Binding(
-                        get: { tg.eventColor },
-                        set: { newColor in
-                            tg.eventColor = newColor
-                            Task {
-                                await GroupStore.shared.setEventColor(
-                                    newColor,
-                                    for: tg
-                                )
-                            }
-                        }
-                    ),
+                    selection: eventColorBinding,
                     includeAutomatic: false,
                     usesGroupPalette: true
                 )
@@ -837,6 +856,13 @@ struct MoreInfoView: View {
             .listRowBackground(Color(.secondarySystemBackground))
         }
         .scrollContentBackground(.hidden)
+        .onAppear { selectedEventColor = tg.eventColor }
+        .onChange(of: tg.eventColor) { _, newColor in
+            // Other members can change the colour while this screen is open.
+            if selectedEventColor != newColor {
+                selectedEventColor = newColor
+            }
+        }
         .alert(
             "Leave this group?",
             isPresented: $isConfirmingLeave,
