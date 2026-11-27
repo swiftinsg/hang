@@ -30,7 +30,7 @@ struct MeView: View {
                 PersonalCalendarView(
                     personalEvents: $personalStore.events,
                     // Every group the user belongs to, not just the first one.
-                    // Each event carries the colour chosen for its group.
+                    // Each event carries its group's display colour.
                     groupEvents: groupStore.groups.flatMap(\.events)
                 )
             }
