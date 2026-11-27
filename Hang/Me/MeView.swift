@@ -65,13 +65,13 @@ struct PersonalCalendarView: View {
     @State private var activeSheet: PersonalCalendarSheet?
     @State private var calendarStore = PersonalCalendarStore.shared
     @State private var personalStore = PersonalEventsStore.shared
-
+    
     /// Per-event outline colours are local to this device, never online.
     @AppStorage(PersonalEventColors.storageKey) private var colorsJSON: String = PersonalEventColors.emptyJSON
     private var storedColors: Binding<[String: String]> {
         PersonalEventColors.binding($colorsJSON)
     }
-
+    
     // MARK: - Month grid
     
     private func generateMonthGrid() -> [Date] {
@@ -288,13 +288,11 @@ struct PersonalCalendarView: View {
         ) {
             ForEach(days, id: \.self) { date in
                 dayCell(for: date)
-                    
+                
             }
         }
     }
-    
     private func dayCell(for date: Date) -> some View {
-        var cellSize: CGSize = .zero
         let isCurrentMonth = calendar.isDate(
             date,
             equalTo: displayedMonth,
@@ -306,9 +304,8 @@ struct PersonalCalendarView: View {
         let dayStart = calendar.startOfDay(for: date)
         let dayEnd =
         calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
-        
         // Highlight every day an event covers, including the days in between its start and end, so selecting a middle day still shows the event.
-        
+        var cellSize: CGSize = .zero
         var groupEventsToday = groupEvents.filter { event in
             event.startDate < dayEnd && event.endDate > dayStart
         }
@@ -321,13 +318,22 @@ struct PersonalCalendarView: View {
         var hasGroupEvents = !groupEventsToday.isEmpty
         var eventsToday = {
             var groupEventTimes: [EventTime] = {
-                groupEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor) }
+                groupEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor ?? Color.gray) }
             }()
             groupEventTimes +=  {
-                personalEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor) }
+                personalEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor ?? Color.gray) }
             }()
             let personalEventTimes: [EventTime] = {
-                savedEventsToday.compactMap { EventTime(start: $0.startDate.timeIntervalSince1970, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor) }
+                savedEventsToday.compactMap {
+                    EventTime(
+                        start: $0.startDate.timeIntervalSince1970,
+                        dur: $0.endDate.timeIntervalSince($0.startDate),
+                        color: PersonalEventColors.color(
+                            in: storedColors.wrappedValue,
+                            for: PersonalEventColorKey.imported($0.id),
+                            default: .gray
+                    ))
+                }
             }()
             let sortedTimes = groupEventTimes + personalEventTimes.sorted {
                 if $0.start == $1.start { return $0.dur > $1.dur }
@@ -355,9 +361,11 @@ struct PersonalCalendarView: View {
                     ZStack(alignment: .leading) {
                         Capsule()
                             .frame(width: cellSize.width*capsWidth, height: cellSize.height*0.1)
-                            .hidden()
+                            .foregroundStyle(.black.opacity(0.05))
                         ForEach(0..<eventsToday.0.count, id: \.self) { x in
-                            let offsetX = CGFloat((eventsToday.0[x].start - eventsToday.2) / eventsToday.1)*cellSize.width*capsWidth
+                            let xnum = CGFloat(eventsToday.0[x].start - eventsToday.2)
+                            let xdenom = CGFloat(eventsToday.1)*cellSize.width*capsWidth
+                            let offsetX = xnum/xdenom
                             let eventWidth = max(CGFloat(eventsToday.0[x].dur / eventsToday.1)*cellSize.width*capsWidth, 2)
                             Capsule()
                                 .foregroundStyle(eventsToday.0[x].color)
@@ -373,7 +381,7 @@ struct PersonalCalendarView: View {
                 ZStack {
                     if hasGroupEvents {
                         RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(storedColors.green.col, lineWidth: 2)
+                            .strokeBorder(Colors().green.col, lineWidth: 2)
                             .padding(2)
                     } else if hasCalendarEvents {
                         RoundedRectangle(cornerRadius: 6)
@@ -399,13 +407,22 @@ struct PersonalCalendarView: View {
                 hasGroupEvents = !groupEventsToday.isEmpty
                 eventsToday = {
                     var groupEventTimes: [EventTime] = {
-                        groupEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor) }
+                        groupEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor ?? Color.gray) }
                     }()
                     groupEventTimes +=  {
-                        personalEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor) }
+                        personalEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor ?? Color.gray) }
                     }()
                     let personalEventTimes: [EventTime] = {
-                        savedEventsToday.compactMap { EventTime(start: $0.startDate.timeIntervalSince1970, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor) }
+                        savedEventsToday.compactMap {
+                            EventTime(
+                                start: $0.startDate.timeIntervalSince1970,
+                                dur: $0.endDate.timeIntervalSince($0.startDate),
+                                color: PersonalEventColors.color(
+                                    in: storedColors.wrappedValue,
+                                    for: PersonalEventColorKey.imported($0.id),
+                                    default: .gray
+                            ))
+                        }
                     }()
                     let sortedTimes = groupEventTimes + personalEventTimes.sorted {
                         if $0.start == $1.start { return $0.dur > $1.dur }
@@ -452,7 +469,7 @@ struct PersonalCalendarView: View {
 
 struct EventTime: Identifiable, Hashable {
     var id = UUID()
-    let start: Double
-    let dur: Double
-    let color: Color = Color.black.opacity(0.25)
+    var start: Double
+    var dur: Double
+    var color: Color
 }
