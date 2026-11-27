@@ -10,8 +10,8 @@ struct colorView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             ZStack{
                 Circle()
-                    .frame(width: screenSize.width*0.1)
-                    .foregroundStyle(.thinMaterial)
+                    .frame(width: screenSize.width*0.09)
+                    .tint(.accentColor)
                 Image(systemName: "pencil")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)

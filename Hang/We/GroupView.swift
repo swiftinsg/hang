@@ -42,14 +42,15 @@ struct GroupView: View {
                         isRenaming = true
                     } label: {
                         HStack(spacing: 8) {
-                            Text(tg.name)
+                            Text("name")
                                 .font(.largeTitle.bold())
                                 .fontWeight(.bold)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             ZStack{
                                 Circle()
-                                    .frame(width: screenSize.width*0.1)
-                                    .foregroundStyle(.thinMaterial)
+                                    .frame(width: screenSize.width*0.09)
+                                    .foregroundStyle(.accent)
+                                    .opacity(0.5)
                                 Image(systemName: "pencil")
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
