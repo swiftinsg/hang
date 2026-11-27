@@ -147,17 +147,27 @@ final class AccountDeletionController: NSObject {
             .collection(Path.Firestore.Calendar)
             .getDocuments()
             .documents
+        try await deleteInBatches(calendarDocuments)
 
-        for start in stride(from: 0, to: calendarDocuments.count, by: 400) {
+        let notificationDocuments = try await userDocument
+            .collection(Path.Firestore.Notifications)
+            .getDocuments()
+            .documents
+        try await deleteInBatches(notificationDocuments)
+
+        try await userDocument.delete()
+    }
+
+    /// Deletes subcollection documents in batches below Firestore's 500-write cap.
+    private func deleteInBatches(_ documents: [QueryDocumentSnapshot]) async throws {
+        for start in stride(from: 0, to: documents.count, by: 400) {
             let batch = db.batch()
-            let end = min(start + 400, calendarDocuments.count)
-            for document in calendarDocuments[start..<end] {
+            let end = min(start + 400, documents.count)
+            for document in documents[start..<end] {
                 batch.deleteDocument(document.reference)
             }
             try await batch.commit()
         }
-
-        try await userDocument.delete()
     }
 
     // MARK: - Sign in with Apple
