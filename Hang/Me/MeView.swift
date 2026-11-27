@@ -60,7 +60,6 @@ struct PersonalCalendarView: View {
         calendar.firstWeekday = 2
         return calendar
     }()
-    
     @State private var displayedMonth: Date = Date()
     @State private var selectedDate: Date? = Date()
     @State private var activeSheet: PersonalCalendarSheet?
@@ -69,7 +68,6 @@ struct PersonalCalendarView: View {
 
     /// Per-event outline colours are local to this device, never online.
     @AppStorage(PersonalEventColors.storageKey) private var colorsJSON: String = PersonalEventColors.emptyJSON
-
     private var storedColors: Binding<[String: String]> {
         PersonalEventColors.binding($colorsJSON)
     }
@@ -147,8 +145,72 @@ struct PersonalCalendarView: View {
             .padding(.vertical, 3)
     }
     
-    // where var body is
-    
+    var body: some View {
+        // The whole calendar scrolls as one page, so the day timeline below
+        // the month grid stays fully visible without its own scroller.
+        ScrollView {
+            VStack(spacing: 2) {
+                monthHeader
+                if !calendarStore.hasFullAccess {
+                    calendarAccessBanner
+                        .padding(.top, 8)
+                }
+                monthGrid
+                Divider()
+                    .padding(.vertical, 8)
+                PersonalDayTimelineView(
+                    date: effectiveSelectedDate,
+                    importedEvents: calendarStore.events,
+                    personalEvents: personalEvents,
+                    groupEvents: groupEvents,
+                    calendar: calendar, storedColors: storedColors,
+                    onEditPersonalEvent: { event in
+                        activeSheet = .edit(event)
+                    }
+                )
+            }
+            .padding(15)
+            // Leave room so the floating add button never covers the last row.
+            .padding(.bottom, 60)
+        }
+        .task {
+            await calendarStore.requestAccessIfNeeded()
+        }
+        .onAppear {
+            calendarStore.loadEventsIfAuthorized()
+        }
+        .refreshable {
+            await AppReloader.reloadAll()
+        }
+        .overlay(alignment: .bottomTrailing) {
+            createEventButton
+        }
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .create:
+                CreatePersonalEventView(
+                    events: $personalEvents,
+                    initialDate: effectiveSelectedDate,
+                    onSave: { newEvents in
+                        personalStore.add(newEvents)
+                    }
+                )
+                .presentationDetents([.large])
+            case .edit(let event):
+                EditEventView(
+                    events: $personalEvents,
+                    eventID: event.id,
+                    onSave: { updatedEvent in
+                        personalStore.update(updatedEvent)
+                    },
+                    onDelete: { eventID in
+                        personalStore.delete(eventID)
+                    }
+                )
+                .presentationDetents([.medium, .large])
+            }
+        }
+    }
     // MARK: - Calendar access
     
     @ViewBuilder
@@ -226,12 +288,150 @@ struct PersonalCalendarView: View {
         ) {
             ForEach(days, id: \.self) { date in
                 dayCell(for: date)
+                    
             }
         }
     }
     
-    
-
+    private func dayCell(for date: Date) -> some View {
+        var cellSize: CGSize = .zero
+        let isCurrentMonth = calendar.isDate(
+            date,
+            equalTo: displayedMonth,
+            toGranularity: .month
+        )
+        let isSelected = selectedDate.map {
+            calendar.isDate($0, inSameDayAs: date)
+        } ?? false
+        let dayStart = calendar.startOfDay(for: date)
+        let dayEnd =
+        calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        
+        // Highlight every day an event covers, including the days in between its start and end, so selecting a middle day still shows the event.
+        
+        var groupEventsToday = groupEvents.filter { event in
+            event.startDate < dayEnd && event.endDate > dayStart
+        }
+        var savedEventsToday: Array<PersonalCalendarEvent> = calendarStore.events(on: date, calendar: calendar)
+        var personalEventsToday = personalEvents.filter { event in
+            event.startDate < dayEnd && event.endDate > dayStart
+        }
+        var hasCalendarEvents =
+        !personalEventsToday.isEmpty || !savedEventsToday.isEmpty
+        var hasGroupEvents = !groupEventsToday.isEmpty
+        var eventsToday = {
+            var groupEventTimes: [EventTime] = {
+                groupEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.color) }
+            }()
+            groupEventTimes +=  {
+                personalEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.color) }
+            }()
+            let personalEventTimes: [EventTime] = {
+                savedEventsToday.compactMap { EventTime(start: $0.startDate.timeIntervalSince1970, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.color) }
+            }()
+            let sortedTimes = groupEventTimes + personalEventTimes.sorted {
+                if $0.start == $1.start { return $0.dur > $1.dur }
+                return $0.start < $1.start
+            }
+            let firstTime = sortedTimes.first?.start
+            let lastTime = sortedTimes.map { $0.start + $0.dur }.max()
+            return (sortedTimes, (lastTime ?? 86400.0)-(firstTime ?? 0), (firstTime ?? 0), ((lastTime ?? 86400.0)))
+        }()
+        var capsWidth: Double = {
+            if hasGroupEvents {
+                return 0.6
+            } else {
+                return 0.65
+            }
+        }()
+        return Button {
+            selectedDate = date
+        } label: {
+            VStack(spacing: 0) {
+                Text("\(calendar.component(.day, from: date))")
+                    .font(.subheadline)
+                    .foregroundStyle(isCurrentMonth ? Color.primary : Color.secondary)
+                if hasGroupEvents || hasCalendarEvents {
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .frame(width: cellSize.width*capsWidth, height: cellSize.height*0.1)
+                            .hidden()
+                        ForEach(0..<eventsToday.0.count, id: \.self) { x in
+                            let offsetX = CGFloat((eventsToday.0[x].start - eventsToday.2) / eventsToday.1)*cellSize.width*capsWidth
+                            let eventWidth = max(CGFloat(eventsToday.0[x].dur / eventsToday.1)*cellSize.width*capsWidth, 2)
+                            Capsule()
+                                .foregroundStyle(eventsToday.0[x].color)
+                                .frame(width: eventWidth, height: cellSize.height*0.1)
+                                .offset(x: offsetX)
+                            
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 45)
+            .overlay {
+                ZStack {
+                    if hasGroupEvents {
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(storedColors.green.col, lineWidth: 2)
+                            .padding(2)
+                    } else if hasCalendarEvents {
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Color.orange, lineWidth: 2)
+                            .padding(2)
+                    }
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(Color.accentColor, lineWidth: 2.5)
+                    }
+                }
+            }
+            .onChange(of: personalEvents) {
+                groupEventsToday = groupEvents.filter { event in
+                    event.startDate < dayEnd && event.endDate > dayStart
+                }
+                savedEventsToday = calendarStore.events(on: date, calendar: calendar)
+                personalEventsToday = personalEvents.filter { event in
+                    event.startDate < dayEnd && event.endDate > dayStart
+                }
+                hasCalendarEvents =
+                !personalEventsToday.isEmpty || !savedEventsToday.isEmpty
+                hasGroupEvents = !groupEventsToday.isEmpty
+                eventsToday = {
+                    var groupEventTimes: [EventTime] = {
+                        groupEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.color) }
+                    }()
+                    groupEventTimes +=  {
+                        personalEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.color) }
+                    }()
+                    let personalEventTimes: [EventTime] = {
+                        savedEventsToday.compactMap { EventTime(start: $0.startDate.timeIntervalSince1970, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.color) }
+                    }()
+                    let sortedTimes = groupEventTimes + personalEventTimes.sorted {
+                        if $0.start == $1.start { return $0.dur > $1.dur }
+                        return $0.start < $1.start
+                    }
+                    let firstTime = sortedTimes.first?.start
+                    let lastTime = sortedTimes.map { $0.start + $0.dur }.max()
+                    return (sortedTimes, (lastTime ?? 86400.0)-(firstTime ?? 0), (firstTime ?? 0), ((lastTime ?? 86400.0)))
+                }()
+                capsWidth = {
+                    if hasGroupEvents {
+                        return 0.6
+                    } else {
+                        return 0.65
+                    }
+                }()
+            }
+            .onGeometryChange(for: CGSize.self) { proxy in
+                proxy.size
+            } action: { newSize in
+                cellSize = newSize
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(calendar.component(.day, from: date))")
+    }
     // Floating action button, pinned to the bottom of the screen so it stays
     // reachable while the calendar page is scrolled.
     private var createEventButton: some View {
@@ -250,3 +450,9 @@ struct PersonalCalendarView: View {
     }
 }
 
+struct EventTime: Identifiable, Hashable {
+    var id = UUID()
+    let start: Double
+    let dur: Double
+    let color: Color = Color.black.opacity(0.25)
+}
