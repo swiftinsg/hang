@@ -335,7 +335,16 @@ struct PersonalCalendarView: View {
                 groupEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor.col) }
             }()
             groupEventTimes +=  {
-                personalEventsToday.compactMap { EventTime(start: $0.time, dur: $0.endDate.timeIntervalSince($0.startDate), color: $0.groupColor.col) }
+                personalEventsToday.compactMap { event in
+                    EventTime(
+                        start: event.time,
+                        dur: event.endDate.timeIntervalSince(event.startDate),
+                        color: PersonalEventColors.color(
+                            in: storedColors.wrappedValue,
+                            for: PersonalEventColorKey.personal(event.id),
+                            default: .gray
+                        ))
+                }
             }()
             let personalEventTimes: [EventTime] = {
                 savedEventsToday.compactMap {
@@ -349,7 +358,7 @@ struct PersonalCalendarView: View {
                         ))
                 }
             }()
-            let sortedTimes = groupEventTimes + personalEventTimes.sorted {
+            let sortedTimes = (groupEventTimes + personalEventTimes).sorted {
                 if $0.start == $1.start { return $0.dur > $1.dur }
                 return $0.start < $1.start
             }
@@ -372,20 +381,22 @@ struct PersonalCalendarView: View {
                     .font(.subheadline)
                     .foregroundStyle(isCurrentMonth ? Color.primary : Color.secondary)
                 if hasGroupEvents || hasCalendarEvents {
-                    ZStack() {
-                        Capsule()
-                            .frame(width: cellSize.width*capsWidth, height: cellSize.height*0.1)
-                            .foregroundStyle(.black.opacity(0.05))
-                        ForEach(0..<eventsToday.0.count, id: \.self) { x in
-                            let xfract = CGFloat(eventsToday.0[x].start - eventsToday.2)/CGFloat(eventsToday.1)
-                            let wfract = CGFloat(eventsToday.0[x].dur / eventsToday.1)
-                            let offsetX = (xfract)*cellSize.width*capsWidth
-                            let eventWidth = wfract*cellSize.width*capsWidth
+                    ZStack {
+                        ZStack(alignment: .leading) {
                             Capsule()
-                                .foregroundStyle(eventsToday.0[x].color)
-                                .frame(width: max(eventWidth, cellSize.height*0.1), height: cellSize.height*0.1)
-                                .offset(x: offsetX)
-                            
+                                .frame(width: cellSize.width*capsWidth, height: cellSize.height*0.1)
+                                .foregroundStyle(.black.opacity(0.05))
+                            ForEach(0..<eventsToday.0.count, id: \.self) { x in
+                                let xfract = CGFloat(eventsToday.0[x].start - eventsToday.2)/CGFloat(eventsToday.1)
+                                let wfract = CGFloat(eventsToday.0[x].dur / eventsToday.1)
+                                let offsetX = (xfract)*cellSize.width*capsWidth
+                                let eventWidth = wfract*cellSize.width*capsWidth
+                                Capsule()
+                                    .foregroundStyle(eventsToday.0[x].color)
+                                    .frame(width: max(eventWidth, cellSize.height*0.1), height: cellSize.height*0.1)
+                                    .offset(x: offsetX)
+                                
+                            }
                         }
                         if hasGroupEvents {
                             groupEventsToday.first?.groupColor.img

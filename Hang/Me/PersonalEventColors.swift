@@ -62,21 +62,20 @@ public enum PersonalEventOutlineColor: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The closest colour in the `HangColors` palette used by group events.
-    /// `HangColors` has no orange or purple, so those two map to their nearest
-    /// neighbour instead of growing the palette.
+    /// The colour in the `HangColors` palette used by group events.
+    /// `.automatic` has no fixed colour and returns `nil`.
     var hangColor: HangColors? {
         switch self {
         case .automatic:
             return nil
         case .orange:
-            return .yellow
+            return .orange
         case .red:
             return .red
         case .pink:
             return .pink
         case .purple:
-            return .blue
+            return .purple
         case .blue:
             return .blue
         case .cyan:

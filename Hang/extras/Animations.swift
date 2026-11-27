@@ -4,24 +4,28 @@ import SwiftUI
 
 
 public enum HangColors: Equatable, CaseIterable {
-    case red, yellow, green, cyan, blue, pink
+    case red, orange, yellow, green, cyan, blue, purple, pink
     public var col: Color {
         switch self {
         case .red:    return Color(red: 1.0, green: 0.55, blue: 0.55)
+        case .orange: return Color(red: 1.0, green: 0.75, blue: 0.55)
         case .yellow: return Color(red: 1.0, green: 0.85, blue: 0.55)
         case .green:  return Color(red: 0.55, green: 1.0, blue: 0.55)
         case .cyan:   return Color(red: 0.55, green: 1.0, blue: 0.85)
         case .blue:   return Color(red: 0.55, green: 0.55, blue: 1.0)
+        case .purple:   return Color(red: 0.7, green: 0.5, blue: 1)
         case .pink:   return Color(red: 1.0, green: 0.55, blue: 0.85)
         }
     }
     public var img: Image {
         switch self {
         case .red:    return Image("FlatRedHang")
+        case .orange: return Image("FlatOrangeHang")
         case .yellow: return Image("FlatYellowHang")
         case .green:  return Image("FlatGreenHang")
         case .cyan:   return Image("FlatCyanHang")
         case .blue:   return Image("FlatBlueHang")
+        case .purple: return Image("FlatPurpleHang")
         case .pink:   return Image("FlatPinkHang")
         }
     }
