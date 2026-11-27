@@ -31,11 +31,7 @@ struct MeView: View {
                     personalEvents: $personalStore.events,
                     // Every group the user belongs to, not just the first one.
                     // Each event carries its group's display colour.
-                    //groupEvents: groupStore.groups.flatMap(\.events)
-                    groupEvents: [
-                        GroupEvents(name: "lala", time: 1795200000),
-                        GroupEvents(name: "lala", time: 1795750000)
-                    ]
+                    groupEvents: groupStore.groups.flatMap(\.events)
                 )
             }
             .navigationTitle("My Calendar")
